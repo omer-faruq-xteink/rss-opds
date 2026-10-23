@@ -77,6 +77,35 @@ ${entries.join('\n')}
 `;
 }
 
+/**
+ * Mixed feed: folders (navigation entries) followed by downloadable books,
+ * e.g. a cloud-drive folder. Books carry an optional byte length.
+ * @param {({kind:'nav', id?:string, title:string, href:string, summary?:string} |
+ *          {kind:'book', id:string, title:string, author?:string, date?:Date, summary?:string, epubHref:string, length?:number})[]} items
+ */
+export function mixedFeed(opts, items) {
+  const entries = items.map((it) => it.kind === 'nav'
+    ? `<entry>
+<id>${escapeXml(it.id || it.href)}</id>
+<title>${escapeXml(it.title)}</title>
+<updated>${iso(new Date())}</updated>
+${it.summary ? `<content type="text">${escapeXml(it.summary)}</content>` : ''}
+${link('subsection', it.href, TYPE_ACQ)}
+</entry>`
+    : `<entry>
+<id>${escapeXml(it.id)}</id>
+<title>${escapeXml(it.title || '(untitled)')}</title>
+<updated>${iso(it.date)}</updated>
+<author><name>${escapeXml(it.author || 'Unknown')}</name></author>
+${it.summary ? `<content type="text">${escapeXml(it.summary)}</content>` : ''}
+${link(REL_ACQ, it.epubHref, 'application/epub+zip', it.length ? ` length="${it.length}"` : '')}
+</entry>`);
+  return `${feedHead({ ...opts, selfType: TYPE_ACQ })}
+${entries.join('\n')}
+</feed>
+`;
+}
+
 export function openSearchDescription({ shortName, template }) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">

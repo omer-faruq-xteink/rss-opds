@@ -12,9 +12,12 @@
 //   /opds/search?q=...     keyword search
 //   /opds/search.xml       OpenSearch description
 //   /book/<entryId>/<slug>.epub   the article as an EPUB
+//   /opds/yandex?path=/sub  EPUB files of a public Yandex Disk share (if YANDEX_PUBLIC_URL is set)
+//   /yd/<encoded path>/<name>.epub  download of such a file, proxied
 //   /health                unauthenticated liveness check
 import { CommaFeed, CommaFeedError, normalizeRestEntry } from './commafeed.js';
-import { acquisitionFeed, navigationFeed, openSearchDescription } from './opds.js';
+import { acquisitionFeed, mixedFeed, navigationFeed, openSearchDescription } from './opds.js';
+import * as yandex from './sources/yandex.js';
 import { buildEpub, collectImageUrls, slugify } from './epub.js';
 import { textExcerpt } from './html.js';
 import { configuredChain, extractFullText } from './sanitizers.js';
@@ -108,6 +111,7 @@ function cfg(env) {
     lang: env.LANG || 'en',
     fullText: String(env.FULLTEXT || '').toLowerCase() === 'true',
     chain: configuredChain(env),
+    yandex: yandex.yandexConfigured(env),
   };
 }
 
@@ -170,12 +174,69 @@ async function handle(request, env, ctx) {
         ? { title: 'Görselsiz / Text only', href: href('/opds', { images: '0' }), kind: 'nav', summary: 'Same catalog, articles without images (faster)' }
         : { title: 'Görselli / With images', href: href('/opds', { images: '1' }), kind: 'nav', summary: 'Same catalog, article images embedded (slower)' },
     ];
+    if (c.yandex) {
+      items.push({ title: 'Yandex Disk', href: href('/opds/yandex'), kind: 'nav', summary: 'EPUB files in the shared Yandex Disk folder' });
+    }
     if (c.chain.length) {
       items.push(c.fullText
         ? { title: 'Özet / Feed text', href: href('/opds', { full: '0' }), kind: 'nav', summary: 'Same catalog, article text as delivered by the feed' }
         : { title: 'Tam metin / Full text', href: href('/opds', { full: '1' }), kind: 'nav', summary: `Same catalog, full articles via ${c.chain.join(', ')}` });
     }
     return xml(navigationFeed({ ...common, id: href('/opds'), title: c.title, self: href('/opds') }, items), 'application/atom+xml;profile=opds-catalog;kind=navigation');
+  }
+
+  // ---- Yandex Disk public share
+  if (path === '/opds/yandex') {
+    if (!c.yandex) return text('Yandex Disk is not configured (YANDEX_PUBLIC_URL)', 404);
+    const folder = url.searchParams.get('path') || '/';
+    const offset = (page - 1) * c.pageSize;
+    const data = await yandex.listFolder(env, { path: folder, offset, limit: c.pageSize });
+    const self = href(path, { path: folder === '/' ? undefined : folder, page: page > 1 ? page : undefined });
+    const items = [
+      ...data.folders.map((f) => ({ kind: 'nav', title: f.name, href: href('/opds/yandex', { path: f.path }) })),
+      ...data.books.map((b) => ({
+        kind: 'book',
+        id: `urn:yandex:${encodeURIComponent(b.path)}`,
+        title: b.name.replace(/\.epub$/i, ''),
+        author: 'Yandex Disk',
+        date: b.modified,
+        summary: b.size ? `${Math.round(b.size / 1024)} KB` : '',
+        epubHref: href(`/yd/${yandex.encodePath(b.path)}/${slugify(b.name.replace(/\.epub$/i, ''))}.epub`),
+        length: b.size,
+      })),
+    ];
+    const parent = folder === '/' ? null : folder.replace(/\/[^/]*$/, '') || '/';
+    return xml(mixedFeed({
+      ...common,
+      id: self,
+      title: folder === '/' ? 'Yandex Disk' : data.name,
+      self,
+      up: parent === null ? href('/opds') : href('/opds/yandex', { path: parent === '/' ? undefined : parent }),
+      prev: page > 1 ? href(path, { path: folder === '/' ? undefined : folder, page: page > 2 ? page - 1 : undefined }) : null,
+      next: data.hasMore ? href(path, { path: folder === '/' ? undefined : folder, page: page + 1 }) : null,
+    }, items), 'application/atom+xml;profile=opds-catalog;kind=acquisition');
+  }
+  const ym = /^\/yd\/([A-Za-z0-9_-]+)\/[^/]+\.epub$/.exec(path);
+  if (ym) {
+    if (!c.yandex) return text('Yandex Disk is not configured (YANDEX_PUBLIC_URL)', 404);
+    let filePath;
+    try { filePath = yandex.decodePath(ym[1]); } catch { return text('Bad path', 400); }
+    let upstream;
+    try {
+      upstream = await yandex.fetchBook(env, filePath);
+    } catch (err) {
+      if (err && err.status === 404) return text('File not found on Yandex Disk', 404);
+      throw err;
+    }
+    const name = filePath.split('/').pop() || 'book.epub';
+    const headers = {
+      'content-type': 'application/epub+zip',
+      'content-disposition': `attachment; filename="${slugify(name.replace(/\.epub$/i, ''))}.epub"`,
+      'cache-control': 'private, max-age=3600',
+    };
+    const len = upstream.headers.get('content-length');
+    if (len) headers['content-length'] = len;
+    return new Response(request.method === 'HEAD' ? null : upstream.body, { status: 200, headers });
   }
 
   // ---- category / feed navigation

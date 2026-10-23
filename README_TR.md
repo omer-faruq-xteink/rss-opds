@@ -98,6 +98,16 @@ Feed çoğu zaman yalnızca özet taşır. İsterseniz Worker, EPUB'ı üretmede
 - Ücretli kotaları olan servislerde (Instaparser deneme planı, Diffbot ücretsiz plan) her indirme bir çağrı harcar; indirme önbelleği sayesinde aynı yazı tekrar harcamaz.
 - Gelişmiş: `INSTAPARSER_ENDPOINT`, `DIFFBOT_ENDPOINT`, `DIFFBOT_TIMEOUT_MS`, `DIFFBOT_MODE`, `INSTAPAPER_API_BASE` değişkenleriyle uç noktalar değiştirilebilir (test ve kendi kurulumlarınız için).
 
+## Yandex Disk'teki kendi EPUB'larınız
+
+CommaFeed'in yanında, **herkese açık paylaşılmış bir Yandex Disk klasöründeki** EPUB dosyaları da aynı katalogda listelenebilir. Yandex'in public API'si token istemediği için kurulum tek bir değişkendir:
+
+1. Yandex Disk'te bir klasör açın (ör. `Kitaplar`), `.epub` dosyalarınızı koyun (alt klasör olabilir), sağ tık → **Paylaş** → bağlantıyı kopyalayın (`https://disk.yandex.ru/d/XXXX`).
+2. `wrangler.toml` içinde (veya panelde) `YANDEX_PUBLIC_URL` değişkenine bu bağlantıyı yazıp yeniden deploy edin.
+3. Kök menüye **Yandex Disk** girişi gelir; klasörler alt katalog olarak açılır, dosyalar Worker üzerinden iner (cihaz Yandex'e doğrudan bağlanmaz).
+
+Yalnızca `.epub` dosyaları listelenir. Paylaşım bağlantısını bilen herkes klasörü görebilir; katalog yine de OPDS şifrenizin arkasındadır.
+
 ## Ayarlar
 
 `wrangler.toml` içindeki `[vars]` bölümünden (veya panelden) değiştirilebilir:
@@ -113,6 +123,7 @@ Feed çoğu zaman yalnızca özet taşır. İsterseniz Worker, EPUB'ı üretmede
 | `LANG` | `tr` | EPUB dil etiketi (tireleme için) |
 | `FULLTEXT` | `false` | Varsayılan tam metin davranışı (`?full=1/0` ile URL başına değişir) |
 | `SANITIZERS` | `instaparser,diffbot,instapaper` | Tam metin servislerinin deneme sırası |
+| `YANDEX_PUBLIC_URL` | boş | EPUB'ların bulunduğu herkese açık Yandex Disk klasörünün paylaşım bağlantısı |
 
 Secret'lar (`wrangler secret put` ile):
 
@@ -168,7 +179,7 @@ Windows'ta `wrangler dev` "SQLITE_CANTOPEN" verirse proje yolu çok uzundur; `--
 
 ## Yol haritası
 
-- Dropbox / Yandex Disk / Google Drive klasöründeki EPUB'ları aynı katalogda sunma
+- Dropbox / Google Drive klasörleri (Yandex Disk tamamlandı), token'lı özel Yandex klasörleri
 - CrossPoint eklenti (plugin) desteği
 - FiveFilters sanitizer'ı ve aylık çağrı kotası sayacı
 

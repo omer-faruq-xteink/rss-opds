@@ -32,6 +32,9 @@ LANG = "tr"
 FULLTEXT = "false"
 # Order in which sanitizers are tried; ones without a token are skipped.
 SANITIZERS = "instaparser,diffbot,instapaper"
+# Optional second source: EPUB files in a publicly shared Yandex Disk folder.
+# Paste the share link (https://disk.yandex.ru/d/XXXX); no token needed.
+YANDEX_PUBLIC_URL = ""
 
 [observability]
 enabled = true

@@ -33,6 +33,7 @@ e-reader  ──OPDS/HTTPS──▶  Cloudflare Worker  ──API key──▶  
 | `/opds/feeds` → `/opds/feed/<id>` | By subscription |
 | `/opds/search?q=word` | Search (OpenSearch description at `/opds/search.xml`) |
 | `/book/<id>/<title>.epub` | The article as an EPUB |
+| `/opds/yandex?path=/sub` | EPUB files of a public Yandex Disk share (optional) |
 
 Category and feed listings show unread articles by default; add `?read=all` for everything. Readers with weak menu support can be pointed directly at `/opds/unread`.
 
@@ -108,6 +109,16 @@ Feeds often carry only a summary. With one or more of these tokens configured th
 
 Readability-style extraction inside the Worker itself is not offered: parsing a large page costs far more than the free plan's 10 ms of CPU per request. Waiting on an external service does not count toward that limit.
 
+## Your own EPUBs from Yandex Disk
+
+Besides CommaFeed, the catalog can list EPUB files kept in a **publicly shared Yandex Disk folder**. Yandex's public-resources API needs no token, so the setup is one variable:
+
+1. In Yandex Disk, create a folder (for example `Books`), put your `.epub` files in it (subfolders are fine), right-click → **Share** → copy the link (`https://disk.yandex.ru/d/XXXX`).
+2. Set `YANDEX_PUBLIC_URL` to that link in `wrangler.toml` (or the dashboard) and redeploy.
+3. The root menu gains a **Yandex Disk** entry; folders open as sub-catalogs, files download through the Worker (the device never talks to Yandex directly).
+
+Only `.epub` files are listed. Anyone with the share link can read the folder, so keep it for books you are happy to share; the catalog itself is still behind your OPDS login.
+
 ## Configuration
 
 Variables (`[vars]` in `wrangler.toml`, or the dashboard):
@@ -123,6 +134,7 @@ Variables (`[vars]` in `wrangler.toml`, or the dashboard):
 | `LANG` | `tr` | Language tag written into the EPUBs (hyphenation) |
 | `FULLTEXT` | `false` | Default full-text behaviour (`?full=1/0` overrides per URL) |
 | `SANITIZERS` | `instaparser,diffbot,instapaper` | Order of full-text services |
+| `YANDEX_PUBLIC_URL` | empty | Share link of a public Yandex Disk folder with EPUBs (see above) |
 
 Secrets (`npx wrangler secret put NAME`):
 
@@ -152,6 +164,8 @@ node test/mock-commafeed.mjs 8790
 npx wrangler dev --var COMMAFEED_URL:http://127.0.0.1:8790   # .dev.vars: COMMAFEED_API_KEY="testkey"
 ```
 
+The Yandex Disk source against a fake API: `node test/mock-yandex.mjs 8792` and `npx wrangler dev --var YANDEX_PUBLIC_URL:https://disk.yandex.ru/d/TESTSHARE --var YANDEX_API_BASE:http://127.0.0.1:8792`.
+
 The sanitizer chain against fake services (`.dev.vars`: `INSTAPARSER_TOKEN="ip-token"`, `DIFFBOT_TOKEN="db-token"`, `INSTAPAPER_TOKEN="pp-token"`):
 
 ```bash
@@ -176,7 +190,8 @@ Notes for Windows: if `wrangler dev` fails with `SQLITE_CANTOPEN`, the project p
 
 ## Roadmap
 
-- EPUBs from a Dropbox / Yandex Disk / Google Drive folder in the same catalog
+- Dropbox / Google Drive folders as further sources (Yandex Disk is done)
+- Private (token-based) Yandex Disk folders
 - CrossPoint plugin support
 - FiveFilters sanitizer and a monthly call-quota counter
 
