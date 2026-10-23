@@ -1,50 +1,58 @@
-# rss-opds (commafeed-opds)
+# rss-opds
 
-CommaFeed RSS hesabınızı bir **OPDS kataloğu** olarak yayınlayan, **Cloudflare Workers ücretsiz planında** çalışan küçük bir uygulama. Her yazı, e-okuyucunuzun doğrudan indirebileceği bir **EPUB** olarak sunulur. Xteink X4 / X4 Pro (stok "XT Licorice" yazılımı), CrossPoint, KOReader ve OPDS destekleyen diğer okuyucularla kullanılabilir.
+Read your RSS on an e-ink reader. **rss-opds** is a small [Cloudflare Worker](https://workers.cloudflare.com/) that publishes a [CommaFeed](https://www.commafeed.com) account as an **OPDS catalog** and serves every article as a generated **EPUB**. It runs entirely on Cloudflare's free plan: no server, no database, nothing to keep running.
 
-*(English summary at the bottom.)*
+Works with the Xteink X4 / X4 Pro stock firmware ("XT Licorice" and later), CrossPoint, KOReader and any other OPDS-capable reader.
+
+*Türkçe kurulum rehberi: [README_TR.md](README_TR.md)*
 
 ```
-E-okuyucu  ──OPDS/HTTPS──▶  Cloudflare Worker  ──API key──▶  CommaFeed
-(Xteink…)   ◀── EPUB ──────  (bu proje)         ◀── JSON ────  (commafeed.com veya kendi sunucunuz)
+e-reader  ──OPDS/HTTPS──▶  Cloudflare Worker  ──API key──▶  CommaFeed
+(Xteink…)  ◀── EPUB ───────  (this project)     ◀── JSON ────  (commafeed.com or self-hosted)
 ```
 
-- Sunucu, veritabanı, cron yok: her istek anında CommaFeed'den okunur ve EPUB bellekte üretilir.
-- Ücretsiz plan sınırı günde 100.000 istek, istek başına 10 ms CPU; bir yazının EPUB'u bunun çok altında kalır.
-- Katalog HTTP Basic auth (kullanıcı adı / şifre) ile korunur; isterseniz şifre yerine URL'ye gömülü gizli bir anahtar da kullanabilirsiniz.
+## Features
 
-## Katalog yapısı
+- Catalog of unread, starred and all articles, by category and by feed, with search and pagination.
+- One EPUB per article, generated on the fly (EPUB 3 package with an EPUB 2 table of contents for older readers).
+- Optional **full text**: before building the EPUB the article URL can be sent to Instaparser, Diffbot or Instapaper, in a configurable order, with fallback to the feed text. Results are cached for a day.
+- Optional **images** embedded in the EPUB.
+- Both switchable **per catalog URL** (`?images=1`, `?full=1`), so one deployment can serve a fast text-only catalog and a rich one.
+- Optional **mark as read** in CommaFeed when an article is downloaded.
+- Catalog protected by HTTP Basic auth (what reader OPDS settings send), or by a secret path token for readers that cannot send credentials.
 
-| Yol | İçerik |
+## Catalog layout
+
+| Path | Content |
 |---|---|
-| `/opds` | Kök menü (aşağıdakilere bağlantılar) |
-| `/opds/unread` | Okunmamış yazılar, en yeni önce (sayfalı) |
-| `/opds/starred` | Yıldızlı yazılar |
-| `/opds/all` | Son yazılar (okunmuş dahil) |
-| `/opds/categories` → `/opds/category/<id>` | Kategoriye göre |
-| `/opds/feeds` → `/opds/feed/<id>` | Kaynağa göre |
-| `/opds/search?q=kelime` | Arama (OpenSearch tanımı: `/opds/search.xml`) |
-| `/book/<id>/<baslik>.epub` | Yazının EPUB'u |
+| `/opds` | Root menu |
+| `/opds/unread` | Unread articles, newest first (paged) |
+| `/opds/starred` | Starred articles |
+| `/opds/all` | Recent articles including read ones |
+| `/opds/categories` → `/opds/category/<id>` | By category |
+| `/opds/feeds` → `/opds/feed/<id>` | By subscription |
+| `/opds/search?q=word` | Search (OpenSearch description at `/opds/search.xml`) |
+| `/book/<id>/<title>.epub` | The article as an EPUB |
 
-Kategori/kaynak listeleri varsayılan olarak okunmamışları gösterir; `?read=all` ekleyince tümü gelir. Menü desteği zayıf okuyucularda doğrudan `/opds/unread` adresini katalog olarak ekleyebilirsiniz.
+Category and feed listings show unread articles by default; add `?read=all` for everything. Readers with weak menu support can be pointed directly at `/opds/unread`.
 
-Görseller: `?images=1` görselleri EPUB'a gömer, `?images=0` yalnızca metin verir (hızlı). Parametre tüm bağlantılara taşınır; yani aynı Worker'ı cihaza iki katalog olarak ekleyebilirsiniz: `.../opds?images=0` (hızlı) ve `.../opds?images=1` (görselli). Parametre yoksa `INCLUDE_IMAGES` ayarı geçerlidir.
+Switches, carried into every generated link: `?images=1` / `?images=0` and `?full=1` / `?full=0`. They can be combined: `/opds?full=1&images=1`. Without the parameter the deployed defaults (`INCLUDE_IMAGES`, `FULLTEXT`) apply. The root menu also offers toggle entries.
 
-## Kurulum (10 dakika)
+## Setup (about 10 minutes)
 
-### 1. CommaFeed API anahtarı
+### 1. CommaFeed API key
 
-CommaFeed web arayüzünde sağ üstteki profil menüsünden **Settings → Profile** sayfasını açın; **API key** alanındaki üret (generate) düğmesine basıp anahtarı kopyalayın. Anahtar yalnızca okuma ve "okundu işaretleme" için kullanılır; şifreniz hiçbir yere yazılmaz. Not: CommaFeed, şifrenizi değiştirdiğinizde yeni bir API anahtarı üretir; o zaman Worker'daki secret'ı da güncelleyin.
+In the CommaFeed web app open **Settings → Profile**, generate an **API key** and copy it. Only the key is stored, never your password. CommaFeed regenerates the key when you change your password; update the secret then.
 
-Alternatif: API anahtarı yerine CommaFeed kullanıcı adı ve şifrenizi `COMMAFEED_USER` / `COMMAFEED_PASSWORD` secret'ları olarak verebilirsiniz (KOReader RSS eklentisinin kullandığı yöntemle aynı). Çalışır, ama anahtar yöntemi daha güvenlidir: sızarsa yalnızca anahtarı yenilersiniz.
+Alternative: set `COMMAFEED_USER` and `COMMAFEED_PASSWORD` instead (HTTP Basic, the same method the KOReader RSS plugin uses). It works, but the key is safer: if it leaks you just regenerate it.
 
-### 2. Cloudflare hesabı
+### 2. Cloudflare account
 
-[dash.cloudflare.com](https://dash.cloudflare.com) üzerinden ücretsiz bir hesap açın (kredi kartı gerekmez). Workers ücretsiz planı bu proje için yeterlidir.
+Create a free account at [dash.cloudflare.com](https://dash.cloudflare.com) (no credit card). The Workers free plan is enough.
 
-### 3A. Komut satırıyla yayınlama (önerilen)
+### 3A. Deploy from the command line (recommended)
 
-Node.js 18+ kurulu olmalı.
+Needs Node.js 18+.
 
 ```bash
 git clone https://github.com/omer-faruq-xteink/rss-opds.git
@@ -57,129 +65,121 @@ npx wrangler secret put OPDS_PASS
 npx wrangler deploy
 ```
 
-`wrangler deploy` sonunda `https://commafeed-opds.<hesap>.workers.dev` gibi bir adres yazdırır. Katalog adresiniz: **`https://commafeed-opds.<hesap>.workers.dev/opds`**
+`wrangler deploy` prints an address like `https://commafeed-opds.<account>.workers.dev`. Your catalog URL is **`https://commafeed-opds.<account>.workers.dev/opds`**.
 
-Tarayıcıda `/health` yolunu açınca `ok` görmelisiniz; `/opds` yolunu açınca tarayıcı kullanıcı adı/şifre sorar ve XML kataloğu gösterir.
+Open `/health` in a browser: it should print `ok`. Opening `/opds` asks for the username and password and then shows the catalog XML.
 
-### 3B. Komut satırı olmadan (Cloudflare panelinden)
+### 3B. Deploy from the Cloudflare dashboard
 
-1. Bu depoyu GitHub'da kendi hesabınıza fork'layın.
-2. Cloudflare panelinde **Workers & Pages → Create → Import a repository** ile fork'u seçin. Build ayarlarında deploy komutu `npx wrangler deploy` olmalı (varsayılan).
-3. Worker oluştuktan sonra **Settings → Variables and Secrets** altında şu üç **secret**'ı ekleyin: `COMMAFEED_API_KEY`, `OPDS_USER`, `OPDS_PASS`. Kaydedip tekrar deploy edin.
+1. Fork this repository on GitHub.
+2. In the dashboard choose **Workers & Pages → Create → Import a repository** and pick the fork. The deploy command is `npx wrangler deploy` (the default).
+3. After the Worker exists, add three **secrets** under **Settings → Variables and Secrets**: `COMMAFEED_API_KEY`, `OPDS_USER`, `OPDS_PASS`. Save and redeploy.
 
-### 4. E-okuyucuya ekleme
+### 4. Add the catalog to your reader
 
-**Xteink X4 / X4 Pro (stok yazılım, "XT Licorice" ve sonrası):**
-Ayarlar → Wi-Fi'ye bağlanın → **OPDS catalog list → Add catalog**:
+**Xteink X4 / X4 Pro (stock firmware, XT Licorice and later):**
+connect to Wi-Fi, open **OPDS catalog list → Add catalog**:
 
 - Name: `CommaFeed`
-- Catalog URL: `https://commafeed-opds.<hesap>.workers.dev/opds`
-- "Account and password" bölümünü açın: `OPDS_USER` / `OPDS_PASS` değerleri
-- **Test** → **Save**
+- Catalog URL: `https://commafeed-opds.<account>.workers.dev/opds`
+- Expand "Account and password": the `OPDS_USER` / `OPDS_PASS` values
+- **Test**, then **Save**
 
-**CrossPoint (1.3+):** Settings → Connectivity → OPDS Servers → Add Server; aynı URL ve kullanıcı adı/şifre (ikisini de doldurun; şifre boş kalırsa kullanıcı adı gönderilmez).
+**CrossPoint (1.3+):** Settings → Connectivity → OPDS Servers → Add Server; same URL, username and password (fill in both: with an empty password the username is not sent).
 
-**KOReader:** Search → OPDS catalog → + ; URL, kullanıcı adı, şifre.
+**KOReader:** Search → OPDS catalog → + ; URL, username, password.
 
-Bir yazıyı seçip indirin; cihazın kitaplığında `Kaynak-Basligi.epub` olarak görünür.
+Pick an article and download it; it appears in the library as `Feed-Title.epub`.
 
-## Tam metin (sanitizer) desteği
+## Full text (sanitizers)
 
-Feed çoğu zaman yalnızca özet taşır. İsterseniz Worker, EPUB'ı üretmeden önce yazının adresini bir "tam metin" servisine gönderip temiz, tam makaleyi alır (KOReader RSS eklentisindeki sanitizer mantığının aynısı). Sırayla denenir; biri başarısız olursa sonrakine geçilir, hepsi başarısız olursa feed içeriği kullanılır. Sonuç 24 saat önbelleğe alınır; aynı yazı iki kez indirilirse servise tekrar gidilmez.
+Feeds often carry only a summary. With one or more of these tokens configured the Worker fetches the complete, cleaned article before building the EPUB, the same way the KOReader rssreader plugin does. Services are tried in order; if all fail the feed text is used. Results are cached for 24 hours per article.
 
-| Servis | Secret | Nasıl alınır |
+| Service | Secret | Where to get it |
 |---|---|---|
-| Instaparser | `INSTAPARSER_TOKEN` | [instaparser.com](https://www.instaparser.com) hesabı, API token |
-| Diffbot | `DIFFBOT_TOKEN` | [diffbot.com](https://www.diffbot.com) hesabı, API token |
-| Instapaper | `INSTAPAPER_TOKEN` | [instapaper.com/developers/applications](https://www.instapaper.com/developers/applications) kişisel erişim token'ı. Yazı önce hesaba kaydedilir, ayrıştırılmış metni okunur, sonra silinir; bu iş için ayrı bir Instapaper hesabı kullanmanız önerilir |
+| Instaparser | `INSTAPARSER_TOKEN` | [instaparser.com](https://www.instaparser.com) account, API token |
+| Diffbot | `DIFFBOT_TOKEN` | [diffbot.com](https://www.diffbot.com) account, API token |
+| Instapaper | `INSTAPAPER_TOKEN` | personal access token from [instapaper.com/developers/applications](https://www.instapaper.com/developers/applications). The article is saved to the account, its parsed text read back, then the bookmark is deleted; a separate Instapaper account for this is recommended |
 
-- `SANITIZERS` değişkeni deneme sırasını belirler (varsayılan `instaparser,diffbot,instapaper`); token'ı olmayan servis atlanır.
-- `FULLTEXT=true` ile tam metin varsayılan olur. Cihaz başına seçmek için katalog URL'sine `?full=1` / `?full=0` ekleyin; kök menüde "Tam metin / Özet" geçişi de vardır. `?images=1` ile birleştirilebilir: `.../opds?full=1&images=1`.
-- Ücretli kotaları olan servislerde (Instaparser deneme planı, Diffbot ücretsiz plan) her indirme bir çağrı harcar; indirme önbelleği sayesinde aynı yazı tekrar harcamaz.
-- Gelişmiş: `INSTAPARSER_ENDPOINT`, `DIFFBOT_ENDPOINT`, `DIFFBOT_TIMEOUT_MS`, `DIFFBOT_MODE`, `INSTAPAPER_API_BASE` değişkenleriyle uç noktalar değiştirilebilir (test ve kendi kurulumlarınız için).
+- `SANITIZERS` sets the order (default `instaparser,diffbot,instapaper`); services without a token are skipped.
+- `FULLTEXT=true` makes full text the default; `?full=1` / `?full=0` on the catalog URL overrides it per reader.
+- Metered plans spend one call per download; the download cache prevents repeat spending for the same article.
+- Advanced: `INSTAPARSER_ENDPOINT`, `DIFFBOT_ENDPOINT`, `DIFFBOT_TIMEOUT_MS`, `DIFFBOT_MODE`, `INSTAPAPER_API_BASE` override the endpoints (for tests or self-hosted setups).
 
-## Ayarlar
+Readability-style extraction inside the Worker itself is not offered: parsing a large page costs far more than the free plan's 10 ms of CPU per request. Waiting on an external service does not count toward that limit.
 
-`wrangler.toml` içindeki `[vars]` bölümünden (veya panelden) değiştirilebilir:
+## Configuration
 
-| Değişken | Varsayılan | Açıklama |
+Variables (`[vars]` in `wrangler.toml`, or the dashboard):
+
+| Variable | Default | Meaning |
 |---|---|---|
-| `COMMAFEED_URL` | `https://www.commafeed.com` | Kendi CommaFeed sunucunuz varsa adresi |
-| `CATALOG_TITLE` | `CommaFeed` | Cihazda görünen katalog adı |
-| `PAGE_SIZE` | `30` | Sayfa başına yazı (en fazla 60) |
-| `INCLUDE_IMAGES` | `false` | Varsayılan görsel davranışı: `true` ise yazı görselleri EPUB'a gömülür (daha yavaş, daha büyük dosya). Cihaz başına değiştirmek için katalog URL'sine `?images=1` veya `?images=0` ekleyin; kök menüde de "Görselli / Görselsiz" geçişi vardır |
-| `MAX_IMAGES` | `8` | Yazı başına en fazla görsel |
-| `MARK_READ_ON_DOWNLOAD` | `false` | `true` ise indirilen yazı CommaFeed'de okundu işaretlenir |
-| `LANG` | `tr` | EPUB dil etiketi (tireleme için) |
-| `FULLTEXT` | `false` | Varsayılan tam metin davranışı (`?full=1/0` ile URL başına değişir) |
-| `SANITIZERS` | `instaparser,diffbot,instapaper` | Tam metin servislerinin deneme sırası |
+| `COMMAFEED_URL` | `https://www.commafeed.com` | Your CommaFeed instance, if self-hosted |
+| `CATALOG_TITLE` | `CommaFeed` | Catalog name shown on the reader |
+| `PAGE_SIZE` | `30` | Articles per page (max 60; some readers cap feeds at ~62 entries) |
+| `INCLUDE_IMAGES` | `false` | Default image behaviour (`?images=1/0` overrides per URL) |
+| `MAX_IMAGES` | `8` | Max images embedded per article |
+| `MARK_READ_ON_DOWNLOAD` | `false` | Mark the article as read in CommaFeed after download |
+| `LANG` | `tr` | Language tag written into the EPUBs (hyphenation) |
+| `FULLTEXT` | `false` | Default full-text behaviour (`?full=1/0` overrides per URL) |
+| `SANITIZERS` | `instaparser,diffbot,instapaper` | Order of full-text services |
 
-Secret'lar (`wrangler secret put` ile):
+Secrets (`npx wrangler secret put NAME`):
 
-| Secret | Zorunlu | Açıklama |
+| Secret | Required | Meaning |
 |---|---|---|
-| `COMMAFEED_API_KEY` | biri** | CommaFeed API anahtarı (önerilen) |
-| `COMMAFEED_USER`, `COMMAFEED_PASSWORD` | biri** | Alternatif: CommaFeed kullanıcı adı ve şifresi (Basic auth) |
-| `OPDS_USER`, `OPDS_PASS` | biri* | Kataloğun Basic auth kullanıcı adı ve şifresi |
-| `OPDS_TOKEN` | biri* | Alternatif: katalog `https://…/k/<OPDS_TOKEN>/opds` adresinde şifresiz açılır |
-| `INSTAPARSER_TOKEN`, `DIFFBOT_TOKEN`, `INSTAPAPER_TOKEN` | hayır | Tam metin servisleri (bkz. yukarı) |
+| `COMMAFEED_API_KEY` | one of** | CommaFeed API key (recommended) |
+| `COMMAFEED_USER`, `COMMAFEED_PASSWORD` | one of** | Alternative: CommaFeed username and password |
+| `OPDS_USER`, `OPDS_PASS` | one of* | Basic-auth username and password of the catalog |
+| `OPDS_TOKEN` | one of* | Alternative: the catalog is served without a password at `https://…/k/<OPDS_TOKEN>/opds` |
+| `INSTAPARSER_TOKEN`, `DIFFBOT_TOKEN`, `INSTAPAPER_TOKEN` | no | Full-text services (see above) |
 
-\* En az bir koruma yöntemi ayarlanmalıdır; ikisi birden de olabilir. Token yöntemi, kullanıcı adı/şifre gönderemeyen okuyucular içindir; URL'yi paylaşmayın.
-\*\* API anahtarı veya kullanıcı adı + şifre; ikisi de verilirse kullanıcı adı/şifre kullanılır.
+\* At least one protection must be configured; both may be. The token form is for readers that cannot send credentials; do not share that URL.
+\*\* API key or username + password; if both are set, username + password wins.
 
-## Yerel geliştirme ve test
+## Local development and tests
 
 ```bash
-npm test                      # çevrimdışı birim testleri (HTML→XHTML, EPUB, OPDS XML)
-cp .dev.vars.example .dev.vars   # gerçek API anahtarınızı yazın
-npm run dev                   # http://127.0.0.1:8787/opds
+npm test                         # offline unit tests (HTML→XHTML, EPUB, OPDS XML)
+cp .dev.vars.example .dev.vars   # fill in your real values
+npm run dev                      # http://127.0.0.1:8787/opds
 ```
 
-Gerçek hesap olmadan uçtan uca denemek için sahte bir CommaFeed sunucusu var:
+End-to-end without a real account, against a fake CommaFeed:
 
 ```bash
 node test/mock-commafeed.mjs 8790
-npx wrangler dev --var COMMAFEED_URL:http://127.0.0.1:8790   # .dev.vars içinde COMMAFEED_API_KEY="testkey"
+npx wrangler dev --var COMMAFEED_URL:http://127.0.0.1:8790   # .dev.vars: COMMAFEED_API_KEY="testkey"
 ```
 
-Sanitizer zincirini de sahte servislerle denemek için (`.dev.vars` içinde `INSTAPARSER_TOKEN="ip-token"`, `DIFFBOT_TOKEN="db-token"`, `INSTAPAPER_TOKEN="pp-token"`):
+The sanitizer chain against fake services (`.dev.vars`: `INSTAPARSER_TOKEN="ip-token"`, `DIFFBOT_TOKEN="db-token"`, `INSTAPAPER_TOKEN="pp-token"`):
 
 ```bash
 node test/mock-sanitizers.mjs 8791
 npx wrangler dev --var COMMAFEED_URL:http://127.0.0.1:8790 --var INSTAPARSER_ENDPOINT:http://127.0.0.1:8791/instaparser/api/1/article --var DIFFBOT_ENDPOINT:http://127.0.0.1:8791/diffbot/v3/analyze --var INSTAPAPER_API_BASE:http://127.0.0.1:8791/instapaper/api/2
 ```
 
-Windows'ta `wrangler dev` "SQLITE_CANTOPEN" verirse proje yolu çok uzundur; `--persist-to C:\Temp\wrangler-state` ekleyin.
+Notes for Windows: if `wrangler dev` fails with `SQLITE_CANTOPEN`, the project path is too long; add `--persist-to C:\Temp\wrangler-state`. Quote `.dev.vars` values that contain `#` (for example a password): `COMMAFEED_PASSWORD="ab#cd"`, otherwise everything after `#` is treated as a comment. `wrangler secret put` is not affected.
 
-`.dev.vars` içindeki değerlerde `#` varsa (ör. şifre) değeri çift tırnak içine alın: `COMMAFEED_PASSWORD="ab#cd"`. Aksi halde `#` sonrası yorum sayılır ve CommaFeed 401 döner. `wrangler secret put` bu sorundan etkilenmez.
+## How it works
 
-## Nasıl çalışıyor
+- **Listing:** the CommaFeed REST API (`/rest/category/entries`, `/rest/feed/entries`, `?apiKey=`) is read page by page and converted to an OPDS 1.2 Atom acquisition feed. Entry ids are `urn:commafeed:entry:<id>`.
+- **EPUB:** a single article is fetched through CommaFeed's Google Reader compatible API (`stream/items/contents`, `Authorization: GoogleLogin auth=<apiKey>`). The HTML is converted to valid XHTML by a small DOM-less tokenizer (scripts, iframes and event handlers removed, tags balanced). The EPUB is a stored (uncompressed) ZIP with `mimetype` as its first entry.
+- **Mark as read:** `token` + `edit-tag` of the same API in API-key mode, `/rest/entry/mark` in username/password mode.
+- **Cache:** generated EPUBs stay in Cloudflare's cache for 6 hours; authentication is checked on every request.
 
-- **Liste**: CommaFeed REST API (`/rest/category/entries`, `/rest/feed/entries`, `?apiKey=`) ile sayfa sayfa okunur ve OPDS 1.2 Atom "acquisition" feed'ine çevrilir. Girdi ID'leri `urn:commafeed:entry:<id>` biçimindedir.
-- **EPUB**: Tek yazı, CommaFeed'in Google Reader uyumlu API'sinden (`stream/items/contents`, `Authorization: GoogleLogin auth=<apiKey>`) alınır. HTML, DOM'suz küçük bir dönüştürücüyle geçerli XHTML'e çevrilir (script/iframe/olay işleyicileri atılır, etiketler dengelenir). EPUB 3 paketi (EPUB 2 NCX ile birlikte) sıkıştırmasız ZIP olarak üretilir; ilk girdi `mimetype`'tır.
-- **Okundu işaretleme**: API anahtarı modunda aynı API'nin `token` + `edit-tag` uçları, kullanıcı adı/şifre modunda `/rest/entry/mark` kullanılır.
-- **Önbellek**: Üretilen EPUB 6 saat Cloudflare önbelleğinde tutulur (auth kontrolü her istekte yapılır).
+## Limits
 
-## Sınırlamalar
+- Cloudflare free plan: 100,000 requests per day and 10 ms CPU per request. One EPUB needs a fraction of that.
+- Without a sanitizer the content is whatever the feed delivers; a summary-only feed gives a summary-only EPUB.
+- If a reader's OPDS client does not handle navigation feeds, use `/opds/unread` directly.
 
-- Sanitizer tanımlı değilse içerik, CommaFeed'in feed'den aldığı metindir; feed yalnızca özet veriyorsa EPUB'da da özet olur. Worker'ın kendi içinde Readability tarzı ayrıştırma ücretsiz planın 10 ms CPU sınırına sığmadığı için tam metin yalnızca dış servislerle alınır.
-- Görseller varsayılan olarak alt metin olarak `[açıklama]` şeklinde gösterilir; `INCLUDE_IMAGES=true` ile gömülür.
-- Cihazın OPDS istemcisi yönlendirme (redirect) ve menü (navigation) feed'lerini desteklemiyorsa doğrudan `/opds/unread` adresini kullanın.
+## Roadmap
 
-## Yol haritası
+- EPUBs from a Dropbox / Yandex Disk / Google Drive folder in the same catalog
+- CrossPoint plugin support
+- FiveFilters sanitizer and a monthly call-quota counter
 
-- Dropbox / Yandex Disk / Google Drive klasöründeki EPUB'ları aynı katalogda sunma
-- CrossPoint eklenti (plugin) desteği
-- FiveFilters sanitizer'ı ve aylık çağrı kotası sayacı
-
-## Lisans
+## License
 
 MIT
-
----
-
-## English summary
-
-A Cloudflare Worker (free plan) that exposes a CommaFeed account as an OPDS 1.2 catalog; every article is served as a generated EPUB. Tested feed shape matches what the Xteink X4 stock firmware and CrossPoint accept (plain Atom, absolute links, `application/epub+zip`, Basic auth, no redirects).
-
-Deploy: `npm install && npx wrangler login && npx wrangler secret put COMMAFEED_API_KEY && npx wrangler secret put OPDS_USER && npx wrangler secret put OPDS_PASS && npx wrangler deploy`, then add `https://<worker>.workers.dev/opds` to your reader with that username/password. Options are documented in `wrangler.toml`.
