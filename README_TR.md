@@ -94,7 +94,7 @@ Feed çoğu zaman yalnızca özet taşır. İsterseniz Worker, EPUB'ı üretmede
 | Instapaper | `INSTAPAPER_TOKEN` | [instapaper.com/developers/applications](https://www.instapaper.com/developers/applications) kişisel erişim token'ı. Yazı önce hesaba kaydedilir, ayrıştırılmış metni okunur, sonra silinir; bu iş için ayrı bir Instapaper hesabı kullanmanız önerilir |
 
 - `SANITIZERS` değişkeni deneme sırasını belirler (varsayılan `instaparser,diffbot,instapaper`); token'ı olmayan servis atlanır.
-- `FULLTEXT=true` ile tam metin varsayılan olur. Cihaz başına seçmek için katalog URL'sine `?full=1` / `?full=0` ekleyin; kök menüde "Tam metin / Özet" geçişi de vardır. `?images=1` ile birleştirilebilir: `.../opds?full=1&images=1`.
+- `FULLTEXT=true` ile tam metin varsayılan olur. Cihaz başına seçmek için katalog URL'sine `?full=1` / `?full=0` ekleyin; kök menüde "Full text / Feed text" geçişi de vardır (menü İngilizcedir). `?images=1` ile birleştirilebilir: `.../opds?full=1&images=1`.
 - Ücretli kotaları olan servislerde (Instaparser deneme planı, Diffbot ücretsiz plan) her indirme bir çağrı harcar; indirme önbelleği sayesinde aynı yazı tekrar harcamaz.
 - Gelişmiş: `INSTAPARSER_ENDPOINT`, `DIFFBOT_ENDPOINT`, `DIFFBOT_TIMEOUT_MS`, `DIFFBOT_MODE`, `INSTAPAPER_API_BASE` değişkenleriyle uç noktalar değiştirilebilir (test ve kendi kurulumlarınız için).
 
@@ -117,7 +117,7 @@ Yalnızca `.epub` dosyaları listelenir. Paylaşım bağlantısını bilen herke
 | `COMMAFEED_URL` | `https://www.commafeed.com` | Kendi CommaFeed sunucunuz varsa adresi |
 | `CATALOG_TITLE` | `CommaFeed` | Cihazda görünen katalog adı |
 | `PAGE_SIZE` | `30` | Sayfa başına yazı (en fazla 60) |
-| `INCLUDE_IMAGES` | `false` | Varsayılan görsel davranışı: `true` ise yazı görselleri EPUB'a gömülür (daha yavaş, daha büyük dosya). Cihaz başına değiştirmek için katalog URL'sine `?images=1` veya `?images=0` ekleyin; kök menüde de "Görselli / Görselsiz" geçişi vardır |
+| `INCLUDE_IMAGES` | `false` | Varsayılan görsel davranışı: `true` ise yazı görselleri EPUB'a gömülür (daha yavaş, daha büyük dosya). Cihaz başına değiştirmek için katalog URL'sine `?images=1` veya `?images=0` ekleyin; kök menüde de "With images / Text only" geçişi vardır |
 | `MAX_IMAGES` | `8` | Yazı başına en fazla görsel |
 | `MARK_READ_ON_DOWNLOAD` | `false` | `true` ise indirilen yazı CommaFeed'de okundu işaretlenir |
 | `LANG` | `tr` | EPUB dil etiketi (tireleme için) |

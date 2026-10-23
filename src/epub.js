@@ -72,7 +72,7 @@ export function buildEpub(a) {
 <h1>${escapeXml(title)}</h1>
 <p class="meta">${escapeXml(metaParts.join(' · '))}</p>
 ${body || '<p>(no content)</p>'}
-${a.url ? `<hr/>\n<p class="source">Kaynak / Source: <a href="${escapeXml(a.url)}">${escapeXml(a.url)}</a></p>` : ''}
+${a.url ? `<hr/>\n<p class="source">Source: <a href="${escapeXml(a.url)}">${escapeXml(a.url)}</a></p>` : ''}
 </body>
 </html>`;
 

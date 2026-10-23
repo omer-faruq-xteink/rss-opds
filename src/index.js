@@ -165,22 +165,22 @@ async function handle(request, env, ctx) {
   // ---- navigation root
   if (path === '/' || path === '/opds' || path === '/opds.xml' || path === '/catalog') {
     const items = [
-      { title: 'Okunmamış / Unread', href: href('/opds/unread'), summary: 'Unread articles, newest first' },
-      { title: 'Yıldızlı / Starred', href: href('/opds/starred'), summary: 'Starred articles' },
-      { title: 'Tümü / All', href: href('/opds/all'), summary: 'All recent articles' },
-      { title: 'Kategoriler / Categories', href: href('/opds/categories'), kind: 'nav', summary: 'Browse by category' },
-      { title: 'Kaynaklar / Feeds', href: href('/opds/feeds'), kind: 'nav', summary: 'Browse by subscription' },
+      { title: 'Unread', href: href('/opds/unread'), summary: 'Unread articles, newest first' },
+      { title: 'Starred', href: href('/opds/starred'), summary: 'Starred articles' },
+      { title: 'All', href: href('/opds/all'), summary: 'All recent articles' },
+      { title: 'Categories', href: href('/opds/categories'), kind: 'nav', summary: 'Browse by category' },
+      { title: 'Feeds', href: href('/opds/feeds'), kind: 'nav', summary: 'Browse by subscription' },
       c.includeImages
-        ? { title: 'Görselsiz / Text only', href: href('/opds', { images: '0' }), kind: 'nav', summary: 'Same catalog, articles without images (faster)' }
-        : { title: 'Görselli / With images', href: href('/opds', { images: '1' }), kind: 'nav', summary: 'Same catalog, article images embedded (slower)' },
+        ? { title: 'Text only', href: href('/opds', { images: '0' }), kind: 'nav', summary: 'Same catalog, articles without images (faster)' }
+        : { title: 'With images', href: href('/opds', { images: '1' }), kind: 'nav', summary: 'Same catalog, article images embedded (slower)' },
     ];
     if (c.yandex) {
       items.push({ title: 'Yandex Disk', href: href('/opds/yandex'), kind: 'nav', summary: 'EPUB files in the shared Yandex Disk folder' });
     }
     if (c.chain.length) {
       items.push(c.fullText
-        ? { title: 'Özet / Feed text', href: href('/opds', { full: '0' }), kind: 'nav', summary: 'Same catalog, article text as delivered by the feed' }
-        : { title: 'Tam metin / Full text', href: href('/opds', { full: '1' }), kind: 'nav', summary: `Same catalog, full articles via ${c.chain.join(', ')}` });
+        ? { title: 'Feed text', href: href('/opds', { full: '0' }), kind: 'nav', summary: 'Same catalog, article text as delivered by the feed' }
+        : { title: 'Full text', href: href('/opds', { full: '1' }), kind: 'nav', summary: `Same catalog, full articles via ${c.chain.join(', ')}` });
     }
     return xml(navigationFeed({ ...common, id: href('/opds'), title: c.title, self: href('/opds') }, items), 'application/atom+xml;profile=opds-catalog;kind=navigation');
   }
@@ -256,7 +256,7 @@ async function handle(request, env, ctx) {
         }
       };
       walk(root, 0);
-      if (!items.length) items.push({ title: 'Tümü / All', href: href('/opds/all') });
+      if (!items.length) items.push({ title: 'All', href: href('/opds/all') });
     } else {
       const feeds = [];
       const walk = (cat) => { feeds.push(...(cat.feeds || [])); (cat.children || []).forEach(walk); };
