@@ -54,10 +54,24 @@ npx wrangler login
 npx wrangler secret put COMMAFEED_API_KEY
 npx wrangler secret put OPDS_USER
 npx wrangler secret put OPDS_PASS
+```
+
+İsteğe bağlı olanlar da aynı şekilde (istediğiniz kadarı; ne işe yaradıkları aşağıdaki bölümlerde):
+
+```bash
+npx wrangler secret put INSTAPARSER_TOKEN   # Instaparser ile tam metin
+npx wrangler secret put DIFFBOT_TOKEN       # Diffbot ile tam metin
+npx wrangler secret put INSTAPAPER_TOKEN    # Instapaper ile tam metin
+npx wrangler secret put YANDEX_PUBLIC_URL   # herkese açık Yandex Disk klasöründeki EPUB'larınız
+```
+
+Sonra:
+
+```bash
 npx wrangler deploy
 ```
 
-`wrangler deploy` sonunda `https://commafeed-opds.<hesap>.workers.dev` gibi bir adres yazdırır. Katalog adresiniz: **`https://commafeed-opds.<hesap>.workers.dev/opds`**
+Secret'lar hemen geçerli olur ve sonraki deploy'larda kalır. `wrangler deploy` sonunda `https://commafeed-opds.<hesap>.workers.dev` gibi bir adres yazdırır. Katalog adresiniz: **`https://commafeed-opds.<hesap>.workers.dev/opds`**
 
 Tarayıcıda `/health` yolunu açınca `ok` görmelisiniz; `/opds` yolunu açınca tarayıcı kullanıcı adı/şifre sorar ve XML kataloğu gösterir.
 
@@ -65,7 +79,7 @@ Tarayıcıda `/health` yolunu açınca `ok` görmelisiniz; `/opds` yolunu açın
 
 1. Bu depoyu GitHub'da kendi hesabınıza fork'layın.
 2. Cloudflare panelinde **Workers & Pages → Create → Import a repository** ile fork'u seçin. Build ayarlarında deploy komutu `npx wrangler deploy` olmalı (varsayılan).
-3. Worker oluştuktan sonra **Settings → Variables and Secrets** altında şu üç **secret**'ı ekleyin: `COMMAFEED_API_KEY`, `OPDS_USER`, `OPDS_PASS`. Kaydedip tekrar deploy edin.
+3. Worker oluştuktan sonra **Settings → Variables and Secrets** altında **secret**'ları ekleyin: `COMMAFEED_API_KEY`, `OPDS_USER`, `OPDS_PASS` ve isteğe bağlı olanlar (`INSTAPARSER_TOKEN`, `DIFFBOT_TOKEN`, `INSTAPAPER_TOKEN`, `YANDEX_PUBLIC_URL`). Kaydedip tekrar deploy edin.
 
 ### 4. E-okuyucuya ekleme
 
@@ -106,6 +120,8 @@ CommaFeed'in yanında, **herkese açık paylaşılmış bir Yandex Disk klasör�
 2. `YANDEX_PUBLIC_URL` değerini ya `wrangler.toml` içinde (veya panelde) değişken olarak yazıp yeniden deploy edin, ya da bağlantının depoda görünmesini istemiyorsanız `npx wrangler secret put YANDEX_PUBLIC_URL` ile secret olarak girin. İkisini birden yapmayın: `wrangler.toml` içindeki değişken her deploy'da secret'ı ezer.
 3. Kök menüye **Yandex Disk** girişi gelir; klasörler alt katalog olarak açılır, dosyalar Worker üzerinden iner (cihaz Yandex'e doğrudan bağlanmaz).
 
+Birden fazla klasör: bağlantıları virgülle ayırın, isterseniz başına `|` ile bir etiket koyun: `Kitaplar|https://disk.yandex.ru/d/AAA, Dergiler|https://disk.yandex.ru/d/BBB`. Her paylaşım kök menüde ayrı bir giriş olur.
+
 Yalnızca `.epub` dosyaları listelenir. Paylaşım bağlantısını bilen herkes klasörü görebilir; katalog yine de OPDS şifrenizin arkasındadır.
 
 ## Ayarlar
@@ -123,7 +139,7 @@ Yalnızca `.epub` dosyaları listelenir. Paylaşım bağlantısını bilen herke
 | `LANG` | `tr` | EPUB dil etiketi (tireleme için) |
 | `FULLTEXT` | `false` | Varsayılan tam metin davranışı (`?full=1/0` ile URL başına değişir) |
 | `SANITIZERS` | `instaparser,diffbot,instapaper` | Tam metin servislerinin deneme sırası |
-| `YANDEX_PUBLIC_URL` | boş | EPUB'ların bulunduğu herkese açık Yandex Disk klasörünün paylaşım bağlantısı |
+| `YANDEX_PUBLIC_URL` | boş | EPUB'ların bulunduğu herkese açık Yandex Disk klasör bağlantıları, virgülle ayrılmış, isteğe bağlı `Etiket|` öneki |
 
 Secret'lar (`wrangler secret put` ile):
 

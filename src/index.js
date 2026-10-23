@@ -111,7 +111,7 @@ function cfg(env) {
     lang: env.LANG || 'en',
     fullText: String(env.FULLTEXT || '').toLowerCase() === 'true',
     chain: configuredChain(env),
-    yandex: yandex.yandexConfigured(env),
+    shares: yandex.shares(env),
   };
 }
 
@@ -174,9 +174,9 @@ async function handle(request, env, ctx) {
         ? { title: 'Text only', href: href('/opds', { images: '0' }), kind: 'nav', summary: 'Same catalog, articles without images (faster)' }
         : { title: 'With images', href: href('/opds', { images: '1' }), kind: 'nav', summary: 'Same catalog, article images embedded (slower)' },
     ];
-    if (c.yandex) {
-      items.push({ title: 'Yandex Disk', href: href('/opds/yandex'), kind: 'nav', summary: 'EPUB files in the shared Yandex Disk folder' });
-    }
+    c.shares.forEach((s, i) => {
+      items.push({ title: s.label, href: href('/opds/yandex', { share: i || undefined }), kind: 'nav', summary: 'EPUB files in a shared Yandex Disk folder' });
+    });
     if (c.chain.length) {
       items.push(c.fullText
         ? { title: 'Feed text', href: href('/opds', { full: '0' }), kind: 'nav', summary: 'Same catalog, article text as delivered by the feed' }
@@ -187,21 +187,26 @@ async function handle(request, env, ctx) {
 
   // ---- Yandex Disk public share
   if (path === '/opds/yandex') {
-    if (!c.yandex) return text('Yandex Disk is not configured (YANDEX_PUBLIC_URL)', 404);
+    if (!c.shares.length) return text('Yandex Disk is not configured (YANDEX_PUBLIC_URL)', 404);
+    const shareIdx = Math.max(0, parseInt(url.searchParams.get('share') || '0', 10) || 0);
+    const share = c.shares[shareIdx];
+    if (!share) return text('Unknown Yandex share', 404);
+    const shareParam = shareIdx || undefined; // omitted for the first share: keeps old links valid
     const folder = url.searchParams.get('path') || '/';
     const offset = (page - 1) * c.pageSize;
-    const data = await yandex.listFolder(env, { path: folder, offset, limit: c.pageSize });
-    const self = href(path, { path: folder === '/' ? undefined : folder, page: page > 1 ? page : undefined });
+    const data = await yandex.listFolder(env, share, { path: folder, offset, limit: c.pageSize });
+    const q = (extra) => ({ share: shareParam, ...extra });
+    const self = href(path, q({ path: folder === '/' ? undefined : folder, page: page > 1 ? page : undefined }));
     const items = [
-      ...data.folders.map((f) => ({ kind: 'nav', title: f.name, href: href('/opds/yandex', { path: f.path }) })),
+      ...data.folders.map((f) => ({ kind: 'nav', title: f.name, href: href('/opds/yandex', q({ path: f.path })) })),
       ...data.books.map((b) => ({
         kind: 'book',
-        id: `urn:yandex:${encodeURIComponent(b.path)}`,
+        id: `urn:yandex:${shareIdx}:${encodeURIComponent(b.path)}`,
         title: b.name.replace(/\.epub$/i, ''),
-        author: 'Yandex Disk',
+        author: share.label,
         date: b.modified,
         summary: b.size ? `${Math.round(b.size / 1024)} KB` : '',
-        epubHref: href(`/yd/${yandex.encodePath(b.path)}/${slugify(b.name.replace(/\.epub$/i, ''))}.epub`),
+        epubHref: href(`/yd/${shareIdx ? `${shareIdx}/` : ''}${yandex.encodePath(b.path)}/${slugify(b.name.replace(/\.epub$/i, ''))}.epub`),
         length: b.size,
       })),
     ];
@@ -209,21 +214,24 @@ async function handle(request, env, ctx) {
     return xml(mixedFeed({
       ...common,
       id: self,
-      title: folder === '/' ? 'Yandex Disk' : data.name,
+      title: folder === '/' ? share.label : data.name,
       self,
-      up: parent === null ? href('/opds') : href('/opds/yandex', { path: parent === '/' ? undefined : parent }),
-      prev: page > 1 ? href(path, { path: folder === '/' ? undefined : folder, page: page > 2 ? page - 1 : undefined }) : null,
-      next: data.hasMore ? href(path, { path: folder === '/' ? undefined : folder, page: page + 1 }) : null,
+      up: parent === null ? href('/opds') : href('/opds/yandex', q({ path: parent === '/' ? undefined : parent })),
+      prev: page > 1 ? href(path, q({ path: folder === '/' ? undefined : folder, page: page > 2 ? page - 1 : undefined })) : null,
+      next: data.hasMore ? href(path, q({ path: folder === '/' ? undefined : folder, page: page + 1 })) : null,
     }, items), 'application/atom+xml;profile=opds-catalog;kind=acquisition');
   }
-  const ym = /^\/yd\/([A-Za-z0-9_-]+)\/[^/]+\.epub$/.exec(path);
+  // /yd/<encoded path>/<name>.epub (first share) or /yd/<share index>/<encoded path>/<name>.epub
+  const ym = /^\/yd\/(?:(\d+)\/)?([A-Za-z0-9_-]+)\/[^/]+\.epub$/.exec(path);
   if (ym) {
-    if (!c.yandex) return text('Yandex Disk is not configured (YANDEX_PUBLIC_URL)', 404);
+    if (!c.shares.length) return text('Yandex Disk is not configured (YANDEX_PUBLIC_URL)', 404);
+    const share = c.shares[parseInt(ym[1] || '0', 10)];
+    if (!share) return text('Unknown Yandex share', 404);
     let filePath;
-    try { filePath = yandex.decodePath(ym[1]); } catch { return text('Bad path', 400); }
+    try { filePath = yandex.decodePath(ym[2]); } catch { return text('Bad path', 400); }
     let upstream;
     try {
-      upstream = await yandex.fetchBook(env, filePath);
+      upstream = await yandex.fetchBook(env, share, filePath);
     } catch (err) {
       if (err && err.status === 404) return text('File not found on Yandex Disk', 404);
       throw err;

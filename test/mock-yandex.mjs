@@ -32,9 +32,11 @@ createServer((req, res) => {
   const url = new URL(req.url, `http://localhost:${port}`);
   console.log(req.method, url.pathname + url.search);
   if (url.pathname === '/public/resources') {
-    if (url.searchParams.get('public_key') !== 'https://disk.yandex.ru/d/TESTSHARE') return json(res, { message: 'bad public_key' }, 404);
+    const key = url.searchParams.get('public_key');
+    if (key !== 'https://disk.yandex.ru/d/TESTSHARE' && key !== 'https://disk.yandex.ru/d/SECOND') return json(res, { message: 'bad public_key' }, 404);
     const path = url.searchParams.get('path') || '/';
-    const items = tree[path];
+    // The second share only exposes the Alt folder's contents at its root.
+    const items = key.endsWith('SECOND') ? (path === '/' ? tree['/Kitaplar/Alt'] : null) : tree[path];
     if (!items) return json(res, { message: 'not found' }, 404);
     const limit = parseInt(url.searchParams.get('limit') || '20', 10);
     const offset = parseInt(url.searchParams.get('offset') || '0', 10);

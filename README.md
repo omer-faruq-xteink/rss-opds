@@ -63,10 +63,24 @@ npx wrangler login
 npx wrangler secret put COMMAFEED_API_KEY
 npx wrangler secret put OPDS_USER
 npx wrangler secret put OPDS_PASS
+```
+
+Optional, in the same way (any subset; see the sections below for what they do):
+
+```bash
+npx wrangler secret put INSTAPARSER_TOKEN   # full text via Instaparser
+npx wrangler secret put DIFFBOT_TOKEN       # full text via Diffbot
+npx wrangler secret put INSTAPAPER_TOKEN    # full text via Instapaper
+npx wrangler secret put YANDEX_PUBLIC_URL   # your EPUBs from a public Yandex Disk folder
+```
+
+Then:
+
+```bash
 npx wrangler deploy
 ```
 
-`wrangler deploy` prints an address like `https://commafeed-opds.<account>.workers.dev`. Your catalog URL is **`https://commafeed-opds.<account>.workers.dev/opds`**.
+Secrets take effect immediately and survive later deploys. `wrangler deploy` prints an address like `https://commafeed-opds.<account>.workers.dev`. Your catalog URL is **`https://commafeed-opds.<account>.workers.dev/opds`**.
 
 Open `/health` in a browser: it should print `ok`. Opening `/opds` asks for the username and password and then shows the catalog XML.
 
@@ -74,7 +88,7 @@ Open `/health` in a browser: it should print `ok`. Opening `/opds` asks for the 
 
 1. Fork this repository on GitHub.
 2. In the dashboard choose **Workers & Pages → Create → Import a repository** and pick the fork. The deploy command is `npx wrangler deploy` (the default).
-3. After the Worker exists, add three **secrets** under **Settings → Variables and Secrets**: `COMMAFEED_API_KEY`, `OPDS_USER`, `OPDS_PASS`. Save and redeploy.
+3. After the Worker exists, add the **secrets** under **Settings → Variables and Secrets**: `COMMAFEED_API_KEY`, `OPDS_USER`, `OPDS_PASS`, plus any optional ones (`INSTAPARSER_TOKEN`, `DIFFBOT_TOKEN`, `INSTAPAPER_TOKEN`, `YANDEX_PUBLIC_URL`). Save and redeploy.
 
 ### 4. Add the catalog to your reader
 
@@ -117,6 +131,8 @@ Besides CommaFeed, the catalog can list EPUB files kept in a **publicly shared Y
 2. Set `YANDEX_PUBLIC_URL` to that link, either as a var in `wrangler.toml` (or the dashboard) and redeploy, or as a secret with `npx wrangler secret put YANDEX_PUBLIC_URL` if you do not want the link in your repository. Not both: a var in `wrangler.toml` replaces the secret on every deploy.
 3. The root menu gains a **Yandex Disk** entry; folders open as sub-catalogs, files download through the Worker (the device never talks to Yandex directly).
 
+Several folders: separate the links with commas, optionally with a label before `|`, for example `Books|https://disk.yandex.ru/d/AAA, Magazines|https://disk.yandex.ru/d/BBB`. Each share becomes its own root-menu entry.
+
 Only `.epub` files are listed. Anyone with the share link can read the folder, so keep it for books you are happy to share; the catalog itself is still behind your OPDS login.
 
 ## Configuration
@@ -134,7 +150,7 @@ Variables (`[vars]` in `wrangler.toml`, or the dashboard):
 | `LANG` | `tr` | Language tag written into the EPUBs (hyphenation) |
 | `FULLTEXT` | `false` | Default full-text behaviour (`?full=1/0` overrides per URL) |
 | `SANITIZERS` | `instaparser,diffbot,instapaper` | Order of full-text services |
-| `YANDEX_PUBLIC_URL` | empty | Share link of a public Yandex Disk folder with EPUBs (see above) |
+| `YANDEX_PUBLIC_URL` | empty | Share link(s) of public Yandex Disk folders with EPUBs, comma-separated, optional `Label|` prefix (see above) |
 
 Secrets (`npx wrangler secret put NAME`):
 
