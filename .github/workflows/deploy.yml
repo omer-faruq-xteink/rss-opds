@@ -1,0 +1,24 @@
+# Optional: deploys the Worker on every push to main.
+# Needs two repository secrets: CLOUDFLARE_API_TOKEN (Workers Scripts: Edit) and CLOUDFLARE_ACCOUNT_ID.
+# Worker secrets (COMMAFEED_API_KEY, OPDS_USER, OPDS_PASS) are still set once with `wrangler secret put`
+# or in the Cloudflare dashboard; they are not stored in GitHub.
+name: Deploy to Cloudflare Workers
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm test
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy

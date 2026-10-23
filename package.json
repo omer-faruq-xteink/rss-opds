@@ -1,0 +1,15 @@
+{
+  "name": "commafeed-opds",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker that publishes a CommaFeed account as an OPDS catalog (each article becomes an EPUB) for e-readers such as the Xteink X4.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node test/smoke.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

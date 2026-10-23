@@ -1,0 +1,37 @@
+# Cloudflare Worker config for commafeed-opds.
+# Secrets (COMMAFEED_API_KEY, OPDS_USER, OPDS_PASS) are NOT set here:
+#   npx wrangler secret put COMMAFEED_API_KEY   # or COMMAFEED_USER + COMMAFEED_PASSWORD
+#   npx wrangler secret put OPDS_USER
+#   npx wrangler secret put OPDS_PASS
+# For local dev copy .dev.vars.example to .dev.vars.
+name = "commafeed-opds"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[vars]
+# Base URL of your CommaFeed instance (no trailing slash).
+COMMAFEED_URL = "https://www.commafeed.com"
+# Title shown as the catalog root on the e-reader.
+CATALOG_TITLE = "CommaFeed"
+# Articles per OPDS page (keep <= 60; some readers cap at ~62 entries per feed).
+PAGE_SIZE = "30"
+# "true" embeds article images into the EPUB (slower, bigger downloads).
+INCLUDE_IMAGES = "false"
+# Max images embedded per article when INCLUDE_IMAGES is "true".
+MAX_IMAGES = "8"
+# "true" marks an article as read in CommaFeed after its EPUB is downloaded.
+MARK_READ_ON_DOWNLOAD = "false"
+# Language tag written into the EPUBs.
+LANG = "tr"
+# "true" fetches the full article text through the sanitizer chain by default
+# (per-URL override: ?full=1 / ?full=0). Needs at least one sanitizer token secret:
+#   npx wrangler secret put INSTAPARSER_TOKEN   # https://www.instaparser.com
+#   npx wrangler secret put DIFFBOT_TOKEN       # https://www.diffbot.com
+#   npx wrangler secret put INSTAPAPER_TOKEN    # personal access token, https://www.instapaper.com/developers/applications
+FULLTEXT = "false"
+# Order in which sanitizers are tried; ones without a token are skipped.
+SANITIZERS = "instaparser,diffbot,instapaper"
+
+[observability]
+enabled = true

@@ -1,0 +1,12 @@
+# Copy to .dev.vars for `npm run dev`. Never commit .dev.vars.
+# Quote values that contain '#' or spaces, e.g. COMMAFEED_PASSWORD="ab#cd".
+COMMAFEED_API_KEY="your-commafeed-api-key"
+# or, instead of the API key:
+# COMMAFEED_USER="your-commafeed-username"
+# COMMAFEED_PASSWORD="your-commafeed-password"
+OPDS_USER="reader"
+OPDS_PASS="choose-a-long-password"
+# optional full-text sanitizers (any subset):
+# INSTAPARSER_TOKEN="..."
+# DIFFBOT_TOKEN="..."
+# INSTAPAPER_TOKEN="..."
