@@ -114,7 +114,7 @@ Readability-style extraction inside the Worker itself is not offered: parsing a 
 Besides CommaFeed, the catalog can list EPUB files kept in a **publicly shared Yandex Disk folder**. Yandex's public-resources API needs no token, so the setup is one variable:
 
 1. In Yandex Disk, create a folder (for example `Books`), put your `.epub` files in it (subfolders are fine), right-click → **Share** → copy the link (`https://disk.yandex.ru/d/XXXX`).
-2. Set `YANDEX_PUBLIC_URL` to that link in `wrangler.toml` (or the dashboard) and redeploy.
+2. Set `YANDEX_PUBLIC_URL` to that link, either as a var in `wrangler.toml` (or the dashboard) and redeploy, or as a secret with `npx wrangler secret put YANDEX_PUBLIC_URL` if you do not want the link in your repository. Not both: a var in `wrangler.toml` replaces the secret on every deploy.
 3. The root menu gains a **Yandex Disk** entry; folders open as sub-catalogs, files download through the Worker (the device never talks to Yandex directly).
 
 Only `.epub` files are listed. Anyone with the share link can read the folder, so keep it for books you are happy to share; the catalog itself is still behind your OPDS login.

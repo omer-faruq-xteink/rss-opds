@@ -33,8 +33,11 @@ FULLTEXT = "false"
 # Order in which sanitizers are tried; ones without a token are skipped.
 SANITIZERS = "instaparser,diffbot,instapaper"
 # Optional second source: EPUB files in a publicly shared Yandex Disk folder.
-# Paste the share link (https://disk.yandex.ru/d/XXXX); no token needed.
-YANDEX_PUBLIC_URL = ""
+# Set the share link (https://disk.yandex.ru/d/XXXX) either here as a var:
+#   YANDEX_PUBLIC_URL = "https://disk.yandex.ru/d/XXXX"
+# or, to keep it out of a public repo, as a secret:
+#   npx wrangler secret put YANDEX_PUBLIC_URL
+# Do not do both: a var here replaces the secret on every deploy.
 
 [observability]
 enabled = true

@@ -103,7 +103,7 @@ Feed çoğu zaman yalnızca özet taşır. İsterseniz Worker, EPUB'ı üretmede
 CommaFeed'in yanında, **herkese açık paylaşılmış bir Yandex Disk klasöründeki** EPUB dosyaları da aynı katalogda listelenebilir. Yandex'in public API'si token istemediği için kurulum tek bir değişkendir:
 
 1. Yandex Disk'te bir klasör açın (ör. `Kitaplar`), `.epub` dosyalarınızı koyun (alt klasör olabilir), sağ tık → **Paylaş** → bağlantıyı kopyalayın (`https://disk.yandex.ru/d/XXXX`).
-2. `wrangler.toml` içinde (veya panelde) `YANDEX_PUBLIC_URL` değişkenine bu bağlantıyı yazıp yeniden deploy edin.
+2. `YANDEX_PUBLIC_URL` değerini ya `wrangler.toml` içinde (veya panelde) değişken olarak yazıp yeniden deploy edin, ya da bağlantının depoda görünmesini istemiyorsanız `npx wrangler secret put YANDEX_PUBLIC_URL` ile secret olarak girin. İkisini birden yapmayın: `wrangler.toml` içindeki değişken her deploy'da secret'ı ezer.
 3. Kök menüye **Yandex Disk** girişi gelir; klasörler alt katalog olarak açılır, dosyalar Worker üzerinden iner (cihaz Yandex'e doğrudan bağlanmaz).
 
 Yalnızca `.epub` dosyaları listelenir. Paylaşım bağlantısını bilen herkes klasörü görebilir; katalog yine de OPDS şifrenizin arkasındadır.
