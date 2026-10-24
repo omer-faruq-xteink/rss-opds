@@ -45,7 +45,7 @@ Small clients that cannot read OPDS or EPUB, such as the Xteink X4 Pro **Mini Ap
 
 | Path | Content |
 |---|---|
-| `/api/list?kind=unread\|starred\|all&page=N&n=M` | Article list: `{title, page, has_more, items:[{id, title, feed, date, read, starred, excerpt}]}` |
+| `/api/list?kind=unread\|starred\|all&page=N&n=M` | Article list: `{title, page, has_more, items:[{id, title, feed, date, read, starred, excerpt}]}` (excerpt: up to 400 characters of plain text) |
 | `/api/list?kind=category\|feed&id=<id>` | Same for one category or subscription (`&read=all` includes read ones) |
 | `/api/list?kind=search&q=word` | Keyword search |
 | `/api/categories`, `/api/feeds` | `{items:[{id, name, unread, ...}]}` |

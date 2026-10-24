@@ -13,7 +13,7 @@ import { extractFullText } from './sanitizers.js';
 
 const LIST_DEFAULT = 20;
 const LIST_MAX = 40;
-const EXCERPT_CHARS = 120;
+const EXCERPT_CHARS = 400;   // enough for a preview on the device; 12 items stay a few KB
 const TEXT_DEFAULT = 20000;
 const TEXT_MAX = 60000;
 

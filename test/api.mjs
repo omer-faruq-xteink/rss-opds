@@ -38,7 +38,7 @@ const call = (p, qs = '') => handleApi({ path: p, url: new URL('https://w.exampl
 check('non-api path ignored', (await call('/opds')) === null);
 let r = await (await call('/api/list', '?kind=unread&n=10&page=2')).json();
 check('list page 2', r.page === 2 && r.items.length === 10 && r.items[0].id === '110' && r.has_more === true, JSON.stringify(r).slice(0, 200));
-check('list item shape', r.items[0].excerpt.length <= 121 && r.items[0].date === '2026-10-24 08:15' && r.items[0].feed === 'Kaynak');
+check('list item shape', r.items[0].excerpt.length <= 401 && r.items[0].excerpt.length > 200 && r.items[0].date === '2026-10-24 08:15' && r.items[0].feed === 'Kaynak');
 check('unread maps to category all/unread', calls[0][1].kind === 'category' && calls[0][1].id === 'all' && calls[0][1].readType === 'unread');
 r = await (await call('/api/list', '?kind=feed&id=10')).json();
 check('feed list', calls[1][1].kind === 'feed' && calls[1][1].id === '10' && calls[1][1].readType === 'unread');
