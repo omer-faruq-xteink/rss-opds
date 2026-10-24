@@ -5,13 +5,15 @@
 //   /api/list?kind=unread|all|starred|category|feed&id=<id>&page=N&n=M   article list
 //   /api/categories                                                      categories with unread counts
 //   /api/feeds                                                           subscriptions with unread counts
-//   /api/article/<id>?max=<chars>&mark=1                                 one article as text
+//   /api/article/<id>?max=<chars>&mark=1&images=1                        one article as text (images: see below)
+//   /api/img?u=<id>                                                      one article image as a small JPEG
 //   /api/mark/<id>?read=0|1                                              mark read / unread
 //   /api                                                                 title, accounts [{id, label}], switches
 // Every call takes ?acct=<id> to use another CommaFeed account (default: the first).
 import { CommaFeedError, normalizeRestEntry } from './commafeed.js';
 import { decodeEntities } from './html.js';
 import { extractFullText } from './sanitizers.js';
+import { b64url, collectImages, deviceImage, unb64url } from './images.js';
 
 const LIST_DEFAULT = 20;
 const LIST_MAX = 40;
@@ -182,6 +184,29 @@ export async function handleApi({ path, url, cf, c, env, ctx, request, accounts,
     if (wantMark && request.method === 'GET') {
       ctx.waitUntil(cf.markRead(id).catch((e) => console.error('markRead failed', e && e.message)));
     }
+    // ?images=1: each usable image becomes a "[[img:N]]" paragraph in the text, described in
+    // images[] ({n, w, h, u}; fetch it from /api/img?u=<u>). Images that cannot be turned into a
+    // small JPEG (resizer down, too big, not a photo) become "[image]" / "[image: alt]" instead.
+    let text;
+    let images;
+    if (url.searchParams.get('images') === '1') {
+      const found = collectImages(html, entry.url);
+      let marked = '';
+      let last = 0;
+      for (const im of found) { marked += html.slice(last, im.start) + `<p>[[img:${im.n}]]</p>`; last = im.end; }
+      marked += html.slice(last);
+      text = htmlToText(marked, max).replace(/\[\[img:\d*\]?$/, '');
+      const present = found.filter((im) => text.includes(`[[img:${im.n}]]`));
+      const got = await Promise.all(present.map((im) => deviceImage(im.src, { cache: caches.default, waitUntil: (p) => ctx.waitUntil(p) })));
+      images = [];
+      present.forEach((im, i) => {
+        const r = got[i];
+        if (r) images.push({ n: im.n, w: r.w, h: r.h, u: b64url(im.src) });
+        else text = text.replace(`[[img:${im.n}]]`, im.alt ? `[image: ${im.alt}]` : '[image]');
+      });
+    } else {
+      text = htmlToText(html, max);
+    }
     return json({
       id: String(id),
       title: entry.title || '(untitled)',
@@ -190,8 +215,18 @@ export async function handleApi({ path, url, cf, c, env, ctx, request, accounts,
       date: stamp(entry.date),
       url: entry.url || '',
       source,
-      text: htmlToText(html, max),
+      text,
+      ...(images ? { images } : {}),
     });
+  }
+
+  if (path === '/api/img') {
+    let src;
+    try { src = unb64url(url.searchParams.get('u') || ''); } catch { src = ''; }
+    if (!/^https?:\/\//i.test(src)) return json({ error: 'bad image id' }, 400);
+    const img = await deviceImage(src, { cache: caches.default, waitUntil: (p) => ctx.waitUntil(p) });
+    if (!img) return json({ error: 'image not available' }, 404);
+    return new Response(img.bytes, { status: 200, headers: { 'content-type': 'image/jpeg', 'content-length': String(img.bytes.length), 'cache-control': 'private, max-age=86400' } });
   }
 
   if ((m = /^\/api\/mark\/(\d+)$/.exec(path))) {
