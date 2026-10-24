@@ -39,6 +39,21 @@ Category and feed listings show unread articles by default; add `?read=all` for 
 
 Switches, carried into every generated link: `?images=1` / `?images=0` and `?full=1` / `?full=0`. They can be combined: `/opds?full=1&images=1`. Without the parameter the deployed defaults (`INCLUDE_IMAGES`, `FULLTEXT`) apply. The root menu also offers toggle entries.
 
+## JSON API (for mini apps)
+
+Small clients that cannot read OPDS or EPUB, such as the Xteink X4 Pro **Mini Apps** (Lua, XTOS Licorice API 2.9), get the same account as compact JSON under the same auth prefix (`/k/<token>/api/...` or HTTP Basic):
+
+| Path | Content |
+|---|---|
+| `/api/list?kind=unread\|starred\|all&page=N&n=M` | Article list: `{title, page, has_more, items:[{id, title, feed, date, read, starred, excerpt}]}` |
+| `/api/list?kind=category\|feed&id=<id>` | Same for one category or subscription (`&read=all` includes read ones) |
+| `/api/list?kind=search&q=word` | Keyword search |
+| `/api/categories`, `/api/feeds` | `{items:[{id, name, unread, ...}]}` |
+| `/api/article/<id>?max=<chars>&mark=1` | One article as plain text: `{id, title, feed, author, date, url, source, text}`; `mark=1` marks it read |
+| `/api/mark/<id>?read=0\|1` | Mark read / unread |
+
+`?full=1` works here too: the text comes from the sanitizer chain when one is configured. The Xteink client lives in the [touch-licorice-apps](https://github.com/omer-faruq-xteink/touch-licorice-apps) repo.
+
 ## Setup (about 10 minutes)
 
 ### 1. CommaFeed API key

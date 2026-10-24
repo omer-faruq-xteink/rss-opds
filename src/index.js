@@ -15,12 +15,14 @@
 //   /opds/yandex?path=/sub  EPUB files of a public Yandex Disk share (if YANDEX_PUBLIC_URL is set)
 //   /yd/<encoded path>/<name>.epub  download of such a file, proxied
 //   /health                unauthenticated liveness check
+//   /api/...               JSON API for small clients (lists, articles as text, mark read); see api.js
 import { CommaFeed, CommaFeedError, normalizeRestEntry } from './commafeed.js';
 import { acquisitionFeed, mixedFeed, navigationFeed, openSearchDescription } from './opds.js';
 import * as yandex from './sources/yandex.js';
 import { buildEpub, collectImageUrls, slugify } from './epub.js';
 import { textExcerpt } from './html.js';
 import { configuredChain, extractFullText } from './sanitizers.js';
+import { handleApi } from './api.js';
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
@@ -161,6 +163,10 @@ async function handle(request, env, ctx) {
   const path = auth.path.replace(/\/+$/, '') || '/';
   const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10) || 1);
   const readAll = url.searchParams.get('read') === 'all';
+
+  // ---- JSON API (same auth and ?full= / ?images= switches)
+  const api = await handleApi({ path, url, cf, c, env, ctx, request });
+  if (api) return api;
 
   // ---- navigation root
   if (path === '/' || path === '/opds' || path === '/opds.xml' || path === '/catalog') {
