@@ -127,14 +127,18 @@ Yalnızca `.epub` dosyaları listelenir. Paylaşım bağlantısını bilen herke
 ## Birden fazla CommaFeed hesabı
 
 Tek Worker, örneğin kişisel ve iş hesabı olmak üzere birden fazla CommaFeed hesabını birbirine
-karıştırmadan sunabilir. 1. hesap mevcut ayarlardır. İkinci hesap için aynı secret'ları sonuna
-`_2` ekleyerek tanımlayın; isterseniz iki hesaba da ad verin:
+karıştırmadan sunabilir. 1. hesap, hangisi olursa olsun, zaten tanımlı olan hesaptır; diğeri sonu
+`_2` ile biten aynı secret'larla 2. hesap olur. Hangisinin hangisi olduğu ve adları tamamen size
+kalmış:
 
 ```bash
 npx wrangler secret put COMMAFEED_API_KEY_2      # ya da COMMAFEED_USER_2 + COMMAFEED_PASSWORD_2
-npx wrangler secret put COMMAFEED_LABEL          # isteğe bağlı, ör. Kişisel (varsayılan "Account 1")
-npx wrangler secret put COMMAFEED_LABEL_2        # isteğe bağlı, ör. İş      (varsayılan "Account 2")
+npx wrangler secret put COMMAFEED_LABEL          # isteğe bağlı, 1. hesabın adı (varsayılan "Account 1")
+npx wrangler secret put COMMAFEED_LABEL_2        # isteğe bağlı, 2. hesabın adı (varsayılan "Account 2")
 ```
+
+Örneğin mevcut hesabınız iş hesabıysa `COMMAFEED_LABEL` = `İş`, `COMMAFEED_LABEL_2` = `Kişisel`;
+ya da tam tersi. Adlar yalnızca okuyucuda görünen başlıklardır.
 
 `COMMAFEED_URL_2` yalnızca ikinci hesap başka bir CommaFeed sunucusundaysa (kendi kurulumunuz)
 gerekir; yoksa `COMMAFEED_URL` kullanılır. En fazla beş hesap (`_2` … `_5`).

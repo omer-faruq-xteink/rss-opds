@@ -153,14 +153,18 @@ Only `.epub` files are listed. Anyone with the share link can read the folder, s
 ## Several CommaFeed accounts
 
 One Worker can serve more than one CommaFeed account, for example a personal and a work one,
-without mixing them. Account 1 is the usual configuration. For a second account set the same
-secrets with `_2` at the end, and optionally names for both:
+without mixing them. Account 1 is the configuration you already have, whichever account that is;
+the other one becomes account 2 with the same secrets ending in `_2`. Which is which, and what
+they are called, is entirely your choice:
 
 ```bash
 npx wrangler secret put COMMAFEED_API_KEY_2      # or COMMAFEED_USER_2 + COMMAFEED_PASSWORD_2
-npx wrangler secret put COMMAFEED_LABEL          # optional, e.g. Personal (default "Account 1")
-npx wrangler secret put COMMAFEED_LABEL_2        # optional, e.g. Work     (default "Account 2")
+npx wrangler secret put COMMAFEED_LABEL          # optional name of account 1 (default "Account 1")
+npx wrangler secret put COMMAFEED_LABEL_2        # optional name of account 2 (default "Account 2")
 ```
+
+For example, if your existing account is the work one: `COMMAFEED_LABEL` = `Work`,
+`COMMAFEED_LABEL_2` = `Personal`; or the other way round. The labels are only what the reader shows.
 
 `COMMAFEED_URL_2` is only needed when the second account lives on another CommaFeed server
 (self-hosted); without it the account uses `COMMAFEED_URL`. Up to five accounts (`_2` … `_5`).
