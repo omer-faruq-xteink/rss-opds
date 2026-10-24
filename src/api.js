@@ -9,6 +9,7 @@
 //   /api/mark/<id>?read=0|1                                              mark read / unread
 //   /api                                                                 title, accounts [{id, label}], switches
 // Every call takes ?acct=<id> to use another CommaFeed account (default: the first).
+// Lists, categories and feeds also carry "accounts", so a client stays current without asking /api.
 import { CommaFeedError, normalizeRestEntry } from './commafeed.js';
 import { decodeEntities } from './html.js';
 import { extractFullText } from './sanitizers.js';
@@ -76,6 +77,11 @@ export function listItem(e) {
   };
 }
 
+// the accounts of this Worker as the API shows them
+function accountList(accounts) {
+  return (accounts || []).map((a) => ({ id: String(a.n), label: a.label }));
+}
+
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
     status,
@@ -101,7 +107,7 @@ export async function handleApi({ path, url, cf, c, env, ctx, request, accounts,
     return json({
       title: c.title,
       // CommaFeed accounts of this Worker; pass ?acct=<id> on every call (default: the first)
-      accounts: (accounts || []).map((a) => ({ id: String(a.n), label: a.label })),
+      accounts: accountList(accounts),
       account: acct ? String(acct.n) : '1',
       full_text: c.fullText,
       kinds: ['unread', 'starred', 'all', 'category', 'feed'],
@@ -132,6 +138,7 @@ export async function handleApi({ path, url, cf, c, env, ctx, request, accounts,
       page,
       has_more: !!data.hasMore,
       items: entries.map(listItem),
+      accounts: accountList(accounts),
     });
   }
 
@@ -160,7 +167,7 @@ export async function handleApi({ path, url, cf, c, env, ctx, request, accounts,
       feeds.sort((a, b) => (b.unread || 0) - (a.unread || 0) || String(a.name).localeCompare(String(b.name)));
       for (const f of feeds) items.push({ id: String(f.id), name: f.name, unread: f.unread || 0 });
     }
-    return json({ items });
+    return json({ items, accounts: accountList(accounts) });
   }
 
   if ((m = /^\/api\/article\/(\d+)$/.exec(path))) {

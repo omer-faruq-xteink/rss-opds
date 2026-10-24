@@ -146,7 +146,8 @@ gerekir; yoksa `COMMAFEED_URL` kullanılır. En fazla beş hesap (`_2` … `_5`)
 Birden fazla hesap varsa kataloğun kökü hesapları klasör olarak listeler; her biri alışık olunan
 menüyü açar ve altındaki her şey (listeler, EPUB'lar, okundu işareti) o hesapta kalır. Her adres
 `?acct=N` alır; yoksa 1. hesap kullanılır, yani mevcut okuyucu ayarları ve bağlantılar çalışmaya
-devam eder. `_2` tanımlamayan kurulumlarda hiçbir şey değişmez.
+devam eder. JSON API hesapları `/api` altında listeler; listeler ve feed'ler de aynı `accounts`
+alanını taşır. `_2` tanımlamayan kurulumlarda hiçbir şey değişmez.
 
 ## Ayarlar
 

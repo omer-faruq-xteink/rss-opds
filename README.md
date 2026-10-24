@@ -53,7 +53,7 @@ Small clients that cannot read OPDS or EPUB, such as the Xteink X4 Pro **Mini Ap
 | `/api/mark/<id>?read=0\|1` | Mark read / unread |
 | `/api/article/<id>?images=1` | Also images: each one is a `[[img:N]]` paragraph in `text`, described in `images: [{n, w, h, src}]`; `src` returns a greyscale JPEG of exactly `w`×`h` (at most 456 px wide) |
 
-`/api` returns the catalog title and the configured accounts (`accounts: [{id, label}]`); every call takes `?acct=<id>` (default: the first account). `?full=1` works here too: the text comes from the sanitizer chain when one is configured. Image `src` URLs point at the free [images.weserv.nl](https://images.weserv.nl) resizer, which the client fetches itself (it refuses requests from Cloudflare Workers); the Worker only reads the first bytes of each original to know the resulting size, and when it cannot, the image is fitted into a 456×342 box. The Xteink client lives in the [touch-licorice-apps](https://github.com/omer-faruq-xteink/touch-licorice-apps) repo.
+`/api` returns the catalog title and the configured accounts (`accounts: [{id, label}]`; lists, categories and feeds carry the same field, so a client stays current without asking `/api`); every call takes `?acct=<id>` (default: the first account). `?full=1` works here too: the text comes from the sanitizer chain when one is configured. Image `src` URLs point at the free [images.weserv.nl](https://images.weserv.nl) resizer, which the client fetches itself (it refuses requests from Cloudflare Workers); the Worker only reads the first bytes of each original to know the resulting size, and when it cannot, the image is fitted into a 456×342 box. The Xteink client lives in the [touch-licorice-apps](https://github.com/omer-faruq-xteink/touch-licorice-apps) repo.
 
 ## Setup (about 10 minutes)
 
@@ -174,7 +174,8 @@ Labels and URLs may also be plain variables in `wrangler.toml`.
 With more than one account the catalog root lists the accounts as folders; each opens the usual
 menu, and everything below it (lists, EPUBs, mark-as-read) stays in that account. Every route also
 takes `?acct=N`; without it, account 1 is used, so existing reader settings and links keep working.
-The JSON API lists the accounts at `/api` and takes the same `?acct=N`. Nothing changes for a
+The JSON API lists the accounts at `/api` (lists and feeds carry the same `accounts` field) and
+takes the same `?acct=N`. Nothing changes for a
 deployment that sets no `_2` secret.
 
 ## Configuration

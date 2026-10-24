@@ -79,6 +79,9 @@ r = await get(two, '/api/list?kind=unread&acct=2');
 check('api: list from account 2', JSON.parse(r.body).items[0].title === 'work article' && calls.every((c) => c.host === 'work.example'));
 r = await get(two, '/api/feeds?acct=2');
 check('api: feeds from account 2', JSON.parse(r.body).items[0].name === 'work feed');
+check('api: feeds carry the accounts', JSON.stringify(JSON.parse(r.body).accounts) === JSON.stringify(root.accounts), r.body);
+r = await get(two, '/api/list?kind=unread&acct=2');
+check('api: lists carry the accounts', JSON.stringify(JSON.parse(r.body).accounts) === JSON.stringify(root.accounts), r.body);
 r = await get(two, '/api/list?kind=unread&acct=9');
 check('api: unknown account is 404', r.status === 404);
 
