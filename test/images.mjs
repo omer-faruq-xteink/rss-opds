@@ -1,8 +1,9 @@
-// Offline test of article images for the JSON API: markers in the text, the resizer path, the
-// fallback to a small original JPEG, rejection of everything else, the /api/img proxy and its cache.
+// Offline test of article images for the JSON API: size sniffing of JPEG / PNG / GIF / WebP, the
+// resizer URLs the device fetches (fitted when the size is known, a fixed box otherwise), markers
+// in the text, left-out icons, and the cache of sniffed sizes.
 // Run: node test/images.mjs
 import { handleApi } from '../src/api.js';
-import { b64url, collectImages, jpegSize, resizerUrl, unb64url } from '../src/images.js';
+import { collectImages, deviceImage, fittedSize, imageSize, jpegSize } from '../src/images.js';
 
 let failures = 0;
 const check = (name, cond, extra = '') => {
@@ -10,47 +11,61 @@ const check = (name, cond, extra = '') => {
   if (!cond) failures++;
 };
 
-// a minimal JPEG: SOI, APP0, SOF0 with the given size, padding, EOI
-function jpeg(w, h, pad = 100) {
+function jpeg(w, h) {
   const app0 = [0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 1, 1, 0, 0, 1, 0, 1, 0, 0];
-  const sof = [0xff, 0xc0, 0x00, 0x11, 8, h >> 8, h & 255, w >> 8, w & 255, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1];
-  return new Uint8Array([0xff, 0xd8, ...app0, ...sof, ...new Array(pad).fill(0), 0xff, 0xd9]);
+  const sof = [0xff, 0xc2, 0x00, 0x11, 8, h >> 8, h & 255, w >> 8, w & 255, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1];
+  return new Uint8Array([0xff, 0xd8, ...app0, ...sof, ...new Array(100).fill(0), 0xff, 0xd9]);
 }
-const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
+function png(w, h) {
+  const b = new Uint8Array(40);
+  b.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+  new DataView(b.buffer).setUint32(16, w); new DataView(b.buffer).setUint32(20, h);
+  return b;
+}
+const gif = (w, h) => new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, w & 255, w >> 8, h & 255, h >> 8, 0, 0]);
+function webpVp8x(w, h) {
+  const b = new Uint8Array(30);
+  b.set([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x58]);
+  const W = w - 1, H = h - 1;
+  b.set([W & 255, (W >> 8) & 255, W >> 16, H & 255, (H >> 8) & 255, H >> 16], 24);
+  return b;
+}
 
-check('jpegSize', JSON.stringify(jpegSize(jpeg(456, 300))) === '{"w":456,"h":300}' && jpegSize(PNG) === null);
-check('b64url round trip', unb64url(b64url('https://ä.example/x y.jpg?a=1&b=2')) === 'https://ä.example/x y.jpg?a=1&b=2');
-check('resizer url', resizerUrl('https://a.example/p.jpg').startsWith('https://images.weserv.nl/?url=https%3A%2F%2Fa.example%2Fp.jpg&w=456&h=640&fit=inside&we=&output=jpg'));
+check('jpeg size', JSON.stringify(jpegSize(jpeg(1200, 800))) === '{"w":1200,"h":800}');
+check('png size', JSON.stringify(imageSize(png(800, 600))) === '{"w":800,"h":600}');
+check('gif size', JSON.stringify(imageSize(gif(320, 200))) === '{"w":320,"h":200}');
+check('webp size', JSON.stringify(imageSize(webpVp8x(1000, 500))) === '{"w":1000,"h":500}');
+check('fit wide', JSON.stringify(fittedSize({ w: 1200, h: 800 })) === '{"w":456,"h":304}');
+check('fit tall', JSON.stringify(fittedSize({ w: 600, h: 2000 })) === '{"w":192,"h":640}');
+check('no enlarging', JSON.stringify(fittedSize({ w: 300, h: 169 })) === '{"w":300,"h":169}');
+const d1 = deviceImage('https://a.example/p.png', { w: 1200, h: 800 });
+check('resizer url, known size', d1.w === 456 && d1.h === 304 && d1.url.startsWith('https://images.weserv.nl/?url=https%3A%2F%2Fa.example%2Fp.png&w=456&h=304&fit=fill&output=jpg'), d1.url);
+const d2 = deviceImage('https://a.example/p.png', null);
+check('resizer url, unknown size = box', d2.w === 456 && d2.h === 342 && d2.url.includes('fit=contain') && d2.url.includes('cbg=white'), d2.url);
 
-// ---- fake network and cache
+// ---- fake origins: the Worker only reads the first bytes of each image
 const fetched = [];
 const store = new Map();
 globalThis.caches = { default: {
   match: async (req) => store.get(req.url),
   put: async (req, res) => { store.set(req.url, new Response(await res.arrayBuffer(), { headers: res.headers })); },
 } };
-const reply = (bytes, type) => new Response(bytes, { status: 200, headers: { 'content-type': type, 'content-length': String(bytes.length) } });
-globalThis.fetch = async (input) => {
+const reply = (bytes) => new Response(bytes, { status: 206, headers: { 'content-type': 'application/octet-stream' } });
+globalThis.fetch = async (input, init = {}) => {
   const u = new URL(input instanceof Request ? input.url : String(input));
-  fetched.push(u.toString());
-  if (u.host === 'images.weserv.nl') {
-    const src = u.searchParams.get('url');
-    if (src.endsWith('/ok.jpg') || src.endsWith('/rel.jpg')) return reply(jpeg(456, 300), 'image/jpeg');
-    if (src.endsWith('/tall.jpg')) return reply(jpeg(456, 2000), 'image/jpeg');   // a resizer ignoring h: rejected
-    return new Response('rate limited', { status: 429 });
-  }
-  if (u.pathname === '/down.jpg') return reply(jpeg(300, 200), 'image/jpeg');     // small original: fallback ok
-  if (u.pathname === '/chart.png') return reply(PNG, 'image/png');                 // not a JPEG: rejected
-  if (u.pathname === '/big.jpg') return reply(jpeg(1600, 1200, 200000), 'image/jpeg'); // too big: rejected
+  fetched.push({ url: u.toString(), range: init.headers && init.headers.range, ua: init.headers && init.headers['user-agent'] });
+  if (u.pathname === '/photo.jpg') return reply(jpeg(1200, 800));
+  if (u.pathname === '/rel.png') return reply(png(800, 600));
+  if (u.pathname === '/emoji.png') return reply(png(72, 72));
+  if (u.pathname === '/blocked.jpg') return new Response('denied', { status: 403 });
   return new Response('nope', { status: 404 });
 };
 
-const html = `<p>Intro</p><img src="https://a.example/ok.jpg" alt="Photo">
-<p>Middle</p><img src='/rel.jpg'><img src="https://t.example/pixel.gif" width="1" height="1">
-<img src="data:image/png;base64,AAAA"><figure><img src="https://a.example/down.jpg"></figure>
-<img src="https://a.example/chart.png" alt="Chart"><img src="https://a.example/big.jpg"><p>End</p>`;
-const imgs = collectImages(html, 'https://a.example/post/1');
-check('collectImages skips trackers and data:', imgs.length === 5 && imgs[1].src === 'https://a.example/rel.jpg', JSON.stringify(imgs.map((i) => i.src)));
+const html = `<p>Intro</p><img src="https://a.example/photo.jpg" alt="Photo">
+<p>Middle <img src="https://s.example/emoji.png" alt="🙂"> text</p><img src='/rel.png'>
+<img src="https://t.example/pixel.gif" width="1" height="1"><img src="data:image/png;base64,AAAA">
+<figure><img src="https://a.example/blocked.jpg"></figure><p>End</p>`;
+check('collectImages skips trackers and data:', collectImages(html, 'https://a.example/post/1').length === 4);
 
 const cf = { getEntry: async () => ({ id: '1', title: 'T', content: html, url: 'https://a.example/post/1', feedName: 'F', date: new Date(0) }), findEntryByScan: async () => null, markRead: async () => {} };
 const c = { title: 'X', pageSize: 30, fullText: false, chain: [], markRead: false };
@@ -58,22 +73,20 @@ const ctx = { waitUntil: (p) => p.catch(() => {}) };
 const call = async (p, qs = '') => handleApi({ path: p, url: new URL('https://w.example' + p + qs), cf, c, env: {}, ctx, request: new Request('https://w.example' + p) });
 
 let r = await (await call('/api/article/1')).json();
-check('no images unless asked', !('images' in r) && !r.text.includes('[[img') && !r.text.includes('[image'), r.text);
+check('no images unless asked', !('images' in r) && !r.text.includes('[[img') && fetched.length === 0, r.text);
 
 r = await (await call('/api/article/1', '?images=1')).json();
-check('markers for usable images', r.text.includes('[[img:1]]') && r.text.includes('[[img:2]]') && r.text.includes('[[img:3]]'), r.text);
-check('rejected images become text', r.text.includes('[image: Chart]') && r.text.includes('[image]') && !r.text.includes('[[img:4]]') && !r.text.includes('[[img:5]]'), r.text);
-check('marker order follows the article', r.text.indexOf('Intro') < r.text.indexOf('[[img:1]]') && r.text.indexOf('[[img:1]]') < r.text.indexOf('Middle') && r.text.indexOf('[[img:3]]') < r.text.indexOf('End'));
-check('images list with sizes', JSON.stringify(r.images.map((i) => [i.n, i.w, i.h])) === '[[1,456,300],[2,456,300],[3,300,200]]', JSON.stringify(r.images));
-
+const byN = Object.fromEntries((r.images || []).map((i) => [i.n, i]));
+check('markers in reading order', r.text.indexOf('Intro') < r.text.indexOf('[[img:1]]') && r.text.indexOf('[[img:1]]') < r.text.indexOf('Middle') && r.text.indexOf('[[img:3]]') < r.text.indexOf('[[img:4]]') && r.text.indexOf('[[img:4]]') < r.text.indexOf('End'), r.text);
+check('known sizes are fitted', byN[1] && byN[1].w === 456 && byN[1].h === 304 && byN[3] && byN[3].w === 456 && byN[3].h === 342 && byN[3].src.includes('fit=fill'), JSON.stringify(r.images));
+check('emoji left out', !byN[2] && !r.text.includes('[[img:2]]'), r.text);
+check('unreadable size gets the box', byN[4] && byN[4].w === 456 && byN[4].h === 342 && byN[4].src.includes('fit=contain'), JSON.stringify(byN[4]));
+check('alt is passed on', byN[1].alt === 'Photo');
+check('only the first bytes are asked, with a User-Agent', fetched.every((f) => /^bytes=0-\d+$/.test(f.range) && /rss-opds/.test(f.ua)), JSON.stringify(fetched));
 const before = fetched.length;
-const img = await call('/api/img', '?u=' + r.images[0].u);
-const bytes = new Uint8Array(await img.arrayBuffer());
-check('/api/img serves the JPEG from the cache', img.status === 200 && img.headers.get('content-type') === 'image/jpeg' && jpegSize(bytes).w === 456 && fetched.length === before, `${img.status} ${fetched.length - before}`);
-check('/api/img fallback image', jpegSize(new Uint8Array(await (await call('/api/img', '?u=' + r.images[2].u)).arrayBuffer())).w === 300);
-check('/api/img rejects a bad id', (await call('/api/img', '?u=%%%')).status === 400);
-check('/api/img 404 when there is no usable image', (await call('/api/img', '?u=' + b64url('https://a.example/chart.png'))).status === 404);
-check('/api/img rejects a too tall result', (await call('/api/img', '?u=' + b64url('https://a.example/tall.jpg'))).status === 404);
+await call('/api/article/1', '?images=1');
+check('sniffed sizes are cached', fetched.length === before, `${fetched.length - before} new fetches`);
+check('/api/img is gone', (await call('/api/img', '?u=x')).status === 404);
 
 console.log(`\n${failures} failure(s)`);
 process.exit(failures ? 1 : 0);

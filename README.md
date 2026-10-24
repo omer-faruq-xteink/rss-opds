@@ -51,10 +51,9 @@ Small clients that cannot read OPDS or EPUB, such as the Xteink X4 Pro **Mini Ap
 | `/api/categories`, `/api/feeds` | `{items:[{id, name, unread, ...}]}` |
 | `/api/article/<id>?max=<chars>&mark=1` | One article as plain text: `{id, title, feed, author, date, url, source, text}`; `mark=1` marks it read |
 | `/api/mark/<id>?read=0\|1` | Mark read / unread |
-| `/api/article/<id>?images=1` | Also images: each usable one is a `[[img:N]]` paragraph in `text`, described in `images: [{n, w, h, u}]` |
-| `/api/img?u=<u>` | That image as a greyscale JPEG at most 456 px wide (for devices that cannot decode PNG or large images) |
+| `/api/article/<id>?images=1` | Also images: each one is a `[[img:N]]` paragraph in `text`, described in `images: [{n, w, h, src}]`; `src` returns a greyscale JPEG of exactly `w`×`h` (at most 456 px wide) |
 
-`/api` returns the catalog title and the configured accounts (`accounts: [{id, label}]`); every call takes `?acct=<id>` (default: the first account). `?full=1` works here too: the text comes from the sanitizer chain when one is configured. Images are resized by the free [images.weserv.nl](https://images.weserv.nl) service and kept in the Cloudflare cache; when it fails, a small original JPEG is used, anything else becomes `[image]` in the text. The Xteink client lives in the [touch-licorice-apps](https://github.com/omer-faruq-xteink/touch-licorice-apps) repo.
+`/api` returns the catalog title and the configured accounts (`accounts: [{id, label}]`); every call takes `?acct=<id>` (default: the first account). `?full=1` works here too: the text comes from the sanitizer chain when one is configured. Image `src` URLs point at the free [images.weserv.nl](https://images.weserv.nl) resizer, which the client fetches itself (it refuses requests from Cloudflare Workers); the Worker only reads the first bytes of each original to know the resulting size, and when it cannot, the image is fitted into a 456×342 box. The Xteink client lives in the [touch-licorice-apps](https://github.com/omer-faruq-xteink/touch-licorice-apps) repo.
 
 ## Setup (about 10 minutes)
 
