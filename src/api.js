@@ -99,7 +99,22 @@ function clampInt(v, def, lo, hi) {
  * Serve one /api request. Returns null when the path is not an API path.
  * @param {{path:string, url:URL, cf:object, c:object, env:object, ctx:object, request:Request}} a
  */
-export async function handleApi({ path, url, cf, c, env, ctx, request, accounts, acct }) {
+// Every JSON answer carries server_ms: the time the Worker spent on it (mostly waiting for
+// CommaFeed), so a client can tell a slow server from a slow connection.
+export async function handleApi(args) {
+  const t0 = Date.now();
+  const res = await handleApiInner(args);
+  if (!res) return res;
+  const ms = Date.now() - t0;
+  res.headers.set('Server-Timing', `app;dur=${ms}`);
+  if (!(res.headers.get('content-type') || '').includes('application/json')) return res;
+  const body = await res.text();
+  if (!body.startsWith('{')) return new Response(body, res);
+  const out = body === '{}' ? `{"server_ms":${ms}}` : `{"server_ms":${ms},${body.slice(1)}`;
+  return new Response(out, { status: res.status, headers: res.headers });
+}
+
+async function handleApiInner({ path, url, cf, c, env, ctx, request, accounts, acct }) {
   if (path !== '/api' && !path.startsWith('/api/')) return null;
   let m;
 

@@ -81,6 +81,7 @@ r = await get(two, '/api/feeds?acct=2');
 check('api: feeds from account 2', JSON.parse(r.body).items[0].name === 'work feed');
 check('api: feeds carry the accounts', JSON.stringify(JSON.parse(r.body).accounts) === JSON.stringify(root.accounts), r.body);
 r = await get(two, '/api/list?kind=unread&acct=2');
+check('api: answers carry server_ms', Number.isInteger(JSON.parse(r.body).server_ms) && /app;dur=\d+/.test(r.headers?.get?.('server-timing') || 'app;dur=0'), r.body.slice(0, 80));
 check('api: lists carry the accounts', JSON.stringify(JSON.parse(r.body).accounts) === JSON.stringify(root.accounts), r.body);
 r = await get(two, '/api/list?kind=unread&acct=9');
 check('api: unknown account is 404', r.status === 404);
