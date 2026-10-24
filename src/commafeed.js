@@ -11,6 +11,23 @@ export class CommaFeedError extends Error {
   }
 }
 
+// CommaFeed (commafeed.com in particular) now and then answers 502 / 503 / 504 or drops the
+// connection; one more try a moment later almost always goes through.
+const RETRY_DELAY_MS = 400;
+async function fetchRetry(url, init) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch(url, init);
+      if (res.status < 500 || attempt > 0) return res;
+      console.log(`CommaFeed HTTP ${res.status}, retrying: ${String(url).replace(/apiKey=[^&]+/, 'apiKey=…')}`);
+    } catch (err) {
+      if (attempt > 0) throw err;
+      console.log(`CommaFeed fetch failed (${err && err.message}), retrying`);
+    }
+    await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+  }
+}
+
 export class CommaFeed {
   /**
    * Either an API key (recommended) or the account's username + password.
@@ -40,7 +57,7 @@ export class CommaFeed {
       headers['content-type'] = 'application/json';
       body = JSON.stringify(json);
     }
-    const res = await fetch(url, { method, headers, body });
+    const res = await fetchRetry(url, { method, headers, body });
     if (!res.ok) {
       throw new CommaFeedError(`CommaFeed ${path} failed: HTTP ${res.status}`, res.status);
     }
@@ -60,7 +77,7 @@ export class CommaFeed {
       headers['content-type'] = 'application/x-www-form-urlencoded';
       body = new URLSearchParams(form).toString();
     }
-    const res = await fetch(url, { method, headers, body });
+    const res = await fetchRetry(url, { method, headers, body });
     if (!res.ok) {
       throw new CommaFeedError(`CommaFeed reader ${path} failed: HTTP ${res.status}`, res.status);
     }

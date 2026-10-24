@@ -82,5 +82,20 @@ check('api: feeds from account 2', JSON.parse(r.body).items[0].name === 'work fe
 r = await get(two, '/api/list?kind=unread&acct=9');
 check('api: unknown account is 404', r.status === 404);
 
+// ---- CommaFeed hiccups: one 503 is retried, two are reported
+let flaky = 1;
+const realFetch = globalThis.fetch;
+globalThis.fetch = async (input, init) => {
+  const u = new URL(input instanceof Request ? input.url : String(input));
+  if (u.pathname === '/rest/category/get' && flaky > 0) { flaky--; return new Response('busy', { status: 503 }); }
+  return realFetch(input, init);
+};
+r = await get(two, '/api/feeds?acct=2');
+check('a single 503 from CommaFeed is retried', r.status === 200 && JSON.parse(r.body).items[0].name === 'work feed', r.body);
+flaky = 2;
+r = await get(two, '/api/feeds?acct=2');
+check('two 503s in a row are reported', r.status === 502 && /HTTP 503/.test(r.body), `${r.status} ${r.body}`);
+globalThis.fetch = realFetch;
+
 console.log(`\n${failures} failure(s)`);
 process.exit(failures ? 1 : 0);
