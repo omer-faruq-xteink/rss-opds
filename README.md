@@ -52,7 +52,7 @@ Small clients that cannot read OPDS or EPUB, such as the Xteink X4 Pro **Mini Ap
 | `/api/article/<id>?max=<chars>&mark=1` | One article as plain text: `{id, title, feed, author, date, url, source, text}`; `mark=1` marks it read |
 | `/api/mark/<id>?read=0\|1` | Mark read / unread |
 
-`?full=1` works here too: the text comes from the sanitizer chain when one is configured. The Xteink client lives in the [touch-licorice-apps](https://github.com/omer-faruq-xteink/touch-licorice-apps) repo.
+`/api` returns the catalog title and the configured accounts (`accounts: [{id, label}]`); every call takes `?acct=<id>` (default: the first account). `?full=1` works here too: the text comes from the sanitizer chain when one is configured. The Xteink client lives in the [touch-licorice-apps](https://github.com/omer-faruq-xteink/touch-licorice-apps) repo.
 
 ## Setup (about 10 minutes)
 
@@ -150,6 +150,28 @@ Several folders: separate the links with commas, optionally with a label before 
 
 Only `.epub` files are listed. Anyone with the share link can read the folder, so keep it for books you are happy to share; the catalog itself is still behind your OPDS login.
 
+## Several CommaFeed accounts
+
+One Worker can serve more than one CommaFeed account, for example a personal and a work one,
+without mixing them. Account 1 is the usual configuration. For a second account set the same
+secrets with `_2` at the end, and optionally names for both:
+
+```bash
+npx wrangler secret put COMMAFEED_API_KEY_2      # or COMMAFEED_USER_2 + COMMAFEED_PASSWORD_2
+npx wrangler secret put COMMAFEED_LABEL          # optional, e.g. Personal (default "Account 1")
+npx wrangler secret put COMMAFEED_LABEL_2        # optional, e.g. Work     (default "Account 2")
+```
+
+`COMMAFEED_URL_2` is only needed when the second account lives on another CommaFeed server
+(self-hosted); without it the account uses `COMMAFEED_URL`. Up to five accounts (`_2` … `_5`).
+Labels and URLs may also be plain variables in `wrangler.toml`.
+
+With more than one account the catalog root lists the accounts as folders; each opens the usual
+menu, and everything below it (lists, EPUBs, mark-as-read) stays in that account. Every route also
+takes `?acct=N`; without it, account 1 is used, so existing reader settings and links keep working.
+The JSON API lists the accounts at `/api` and takes the same `?acct=N`. Nothing changes for a
+deployment that sets no `_2` secret.
+
 ## Configuration
 
 Variables (`[vars]` in `wrangler.toml`, or the dashboard):
@@ -176,6 +198,7 @@ Secrets (`npx wrangler secret put NAME`):
 | `OPDS_USER`, `OPDS_PASS` | one of* | Basic-auth username and password of the catalog |
 | `OPDS_TOKEN` | one of* | Alternative: the catalog is served without a password at `https://…/k/<OPDS_TOKEN>/opds` |
 | `INSTAPARSER_TOKEN`, `DIFFBOT_TOKEN`, `INSTAPAPER_TOKEN` | no | Full-text services (see above) |
+| `COMMAFEED_API_KEY_2` … `_5`, `COMMAFEED_USER_2` … / `COMMAFEED_PASSWORD_2` …, `COMMAFEED_URL_2` …, `COMMAFEED_LABEL`, `COMMAFEED_LABEL_2` … | no | Further CommaFeed accounts and their names (see above) |
 
 \* At least one protection must be configured; both may be. The token form is for readers that cannot send credentials; do not share that URL.
 \*\* API key or username + password; if both are set, username + password wins.
@@ -183,7 +206,7 @@ Secrets (`npx wrangler secret put NAME`):
 ## Local development and tests
 
 ```bash
-npm test                         # offline unit tests (HTML→XHTML, EPUB, OPDS XML)
+npm test                         # offline tests (HTML→XHTML, EPUB, OPDS XML, JSON API, accounts)
 cp .dev.vars.example .dev.vars   # fill in your real values
 npm run dev                      # http://127.0.0.1:8787/opds
 ```

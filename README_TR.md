@@ -124,6 +124,26 @@ Birden fazla klasör: bağlantıları virgülle ayırın, isterseniz başına `|
 
 Yalnızca `.epub` dosyaları listelenir. Paylaşım bağlantısını bilen herkes klasörü görebilir; katalog yine de OPDS şifrenizin arkasındadır.
 
+## Birden fazla CommaFeed hesabı
+
+Tek Worker, örneğin kişisel ve iş hesabı olmak üzere birden fazla CommaFeed hesabını birbirine
+karıştırmadan sunabilir. 1. hesap mevcut ayarlardır. İkinci hesap için aynı secret'ları sonuna
+`_2` ekleyerek tanımlayın; isterseniz iki hesaba da ad verin:
+
+```bash
+npx wrangler secret put COMMAFEED_API_KEY_2      # ya da COMMAFEED_USER_2 + COMMAFEED_PASSWORD_2
+npx wrangler secret put COMMAFEED_LABEL          # isteğe bağlı, ör. Kişisel (varsayılan "Account 1")
+npx wrangler secret put COMMAFEED_LABEL_2        # isteğe bağlı, ör. İş      (varsayılan "Account 2")
+```
+
+`COMMAFEED_URL_2` yalnızca ikinci hesap başka bir CommaFeed sunucusundaysa (kendi kurulumunuz)
+gerekir; yoksa `COMMAFEED_URL` kullanılır. En fazla beş hesap (`_2` … `_5`).
+
+Birden fazla hesap varsa kataloğun kökü hesapları klasör olarak listeler; her biri alışık olunan
+menüyü açar ve altındaki her şey (listeler, EPUB'lar, okundu işareti) o hesapta kalır. Her adres
+`?acct=N` alır; yoksa 1. hesap kullanılır, yani mevcut okuyucu ayarları ve bağlantılar çalışmaya
+devam eder. `_2` tanımlamayan kurulumlarda hiçbir şey değişmez.
+
 ## Ayarlar
 
 `wrangler.toml` içindeki `[vars]` bölümünden (veya panelden) değiştirilebilir:

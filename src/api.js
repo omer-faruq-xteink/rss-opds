@@ -7,6 +7,8 @@
 //   /api/feeds                                                           subscriptions with unread counts
 //   /api/article/<id>?max=<chars>&mark=1                                 one article as text
 //   /api/mark/<id>?read=0|1                                              mark read / unread
+//   /api                                                                 title, accounts [{id, label}], switches
+// Every call takes ?acct=<id> to use another CommaFeed account (default: the first).
 import { CommaFeedError, normalizeRestEntry } from './commafeed.js';
 import { decodeEntities } from './html.js';
 import { extractFullText } from './sanitizers.js';
@@ -89,13 +91,16 @@ function clampInt(v, def, lo, hi) {
  * Serve one /api request. Returns null when the path is not an API path.
  * @param {{path:string, url:URL, cf:object, c:object, env:object, ctx:object, request:Request}} a
  */
-export async function handleApi({ path, url, cf, c, env, ctx, request }) {
+export async function handleApi({ path, url, cf, c, env, ctx, request, accounts, acct }) {
   if (path !== '/api' && !path.startsWith('/api/')) return null;
   let m;
 
   if (path === '/api' || path === '/api/') {
     return json({
       title: c.title,
+      // CommaFeed accounts of this Worker; pass ?acct=<id> on every call (default: the first)
+      accounts: (accounts || []).map((a) => ({ id: String(a.n), label: a.label })),
+      account: acct ? String(acct.n) : '1',
       full_text: c.fullText,
       kinds: ['unread', 'starred', 'all', 'category', 'feed'],
       page_size: Math.min(c.pageSize, LIST_DEFAULT),

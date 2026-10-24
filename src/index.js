@@ -16,6 +16,8 @@
 //   /yd/<encoded path>/<name>.epub  download of such a file, proxied
 //   /health                unauthenticated liveness check
 //   /api/...               JSON API for small clients (lists, articles as text, mark read); see api.js
+// Every route takes ?acct=N to use CommaFeed account N (see accounts.js); without it, account 1.
+// With more than one account the catalog root lists the accounts as folders.
 import { CommaFeed, CommaFeedError, normalizeRestEntry } from './commafeed.js';
 import { acquisitionFeed, mixedFeed, navigationFeed, openSearchDescription } from './opds.js';
 import * as yandex from './sources/yandex.js';
@@ -23,6 +25,7 @@ import { buildEpub, collectImageUrls, slugify } from './epub.js';
 import { textExcerpt } from './html.js';
 import { configuredChain, extractFullText } from './sanitizers.js';
 import { handleApi } from './api.js';
+import { accountsFromEnv, pickAccount } from './accounts.js';
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
@@ -135,12 +138,18 @@ async function handle(request, env, ctx) {
   const fullParam = url.searchParams.get('full');
   if (fullParam !== null) c.fullText = /^(1|true|yes|on)$/i.test(fullParam);
   if (!c.chain.length) c.fullText = false;
+  // CommaFeed account: ?acct=N, carried into every generated link like the switches above
+  const accounts = accountsFromEnv(env);
+  const acctParam = url.searchParams.get('acct');
+  const acct = pickAccount(accounts, acctParam);
+  if (!acct) return text('Unknown account', 404);
   const base = url.origin + auth.prefix;
   const href = (p, params) => {
     const u = new URL(base + p);
     const carried = {};
     if (imagesParam !== null) carried.images = c.includeImages ? '1' : '0';
     if (fullParam !== null) carried.full = c.fullText ? '1' : '0';
+    if (acctParam !== null) carried.acct = String(acct.n);
     const all = { ...carried, ...(params || {}) };
     for (const [k, v] of Object.entries(all)) if (v !== undefined && v !== null && v !== '') u.searchParams.set(k, String(v));
     return u.toString();
@@ -154,10 +163,10 @@ async function handle(request, env, ctx) {
     },
   };
   const cf = new CommaFeed({
-    baseUrl: env.COMMAFEED_URL,
-    apiKey: env.COMMAFEED_API_KEY,
-    username: env.COMMAFEED_USER,
-    password: env.COMMAFEED_PASSWORD,
+    baseUrl: acct.baseUrl,
+    apiKey: acct.apiKey,
+    username: acct.username,
+    password: acct.password,
   });
 
   const path = auth.path.replace(/\/+$/, '') || '/';
@@ -165,11 +174,17 @@ async function handle(request, env, ctx) {
   const readAll = url.searchParams.get('read') === 'all';
 
   // ---- JSON API (same auth and ?full= / ?images= switches)
-  const api = await handleApi({ path, url, cf, c, env, ctx, request });
+  const api = await handleApi({ path, url, cf, c, env, ctx, request, accounts, acct });
   if (api) return api;
 
   // ---- navigation root
-  if (path === '/' || path === '/opds' || path === '/opds.xml' || path === '/catalog') {
+  const isRoot = path === '/' || path === '/opds' || path === '/opds.xml' || path === '/catalog';
+  if (isRoot && accounts.length > 1 && acctParam === null) {
+    // several CommaFeed accounts: one folder per account; each opens the usual menu
+    const items = accounts.map((a) => ({ title: a.label, href: href('/opds', { acct: a.n }), kind: 'nav', summary: 'CommaFeed account' }));
+    return xml(navigationFeed({ ...common, id: href('/opds'), title: c.title, self: href('/opds') }, items), 'application/atom+xml;profile=opds-catalog;kind=navigation');
+  }
+  if (isRoot) {
     const items = [
       { title: 'Unread', href: href('/opds/unread'), summary: 'Unread articles, newest first' },
       { title: 'Starred', href: href('/opds/starred'), summary: 'Starred articles' },
@@ -188,7 +203,8 @@ async function handle(request, env, ctx) {
         ? { title: 'Feed text', href: href('/opds', { full: '0' }), kind: 'nav', summary: 'Same catalog, article text as delivered by the feed' }
         : { title: 'Full text', href: href('/opds', { full: '1' }), kind: 'nav', summary: `Same catalog, full articles via ${c.chain.join(', ')}` });
     }
-    return xml(navigationFeed({ ...common, id: href('/opds'), title: c.title, self: href('/opds') }, items), 'application/atom+xml;profile=opds-catalog;kind=navigation');
+    const title = accounts.length > 1 ? `${c.title}: ${acct.label}` : c.title;
+    return xml(navigationFeed({ ...common, id: href('/opds'), title, self: href('/opds') }, items), 'application/atom+xml;profile=opds-catalog;kind=navigation');
   }
 
   // ---- Yandex Disk public share
@@ -340,16 +356,16 @@ async function handle(request, env, ctx) {
   // ---- EPUB download
   if ((m = /^\/book\/(\d+)(?:\/[^/]*)?\.epub$/.exec(path)) || (m = /^\/book\/(\d+)\/[^/]+\.epub$/.exec(path))) {
     const id = m[1];
-    return serveEpub({ id, cf, c, env, ctx, request });
+    return serveEpub({ id, cf, c, env, ctx, request, acct });
   }
 
   return text('Not found', 404);
 }
 
-async function serveEpub({ id, cf, c, env, ctx, request }) {
+async function serveEpub({ id, cf, c, env, ctx, request, acct }) {
   const cache = caches.default;
   const fullKey = c.fullText ? c.chain.join('-') : '0';
-  const cacheKey = new Request(`https://cache.commafeed-opds.invalid/book/${id}?images=${c.includeImages ? c.maxImages : 0}&full=${fullKey}&lang=${encodeURIComponent(c.lang)}`);
+  const cacheKey = new Request(`https://cache.commafeed-opds.invalid/book/${id}?images=${c.includeImages ? c.maxImages : 0}&full=${fullKey}&lang=${encodeURIComponent(c.lang)}${acct && acct.n !== 1 ? `&acct=${acct.n}` : ''}`);
   let res = await cache.match(cacheKey);
 
   if (!res) {
