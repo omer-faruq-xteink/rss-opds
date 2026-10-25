@@ -41,7 +41,7 @@ Switches, carried into every generated link: `?images=1` / `?images=0` and `?ful
 
 ## JSON API (for mini apps)
 
-Small clients that cannot read OPDS or EPUB, such as the Xteink X4 Pro **Mini Apps** (Lua, XTOS Licorice API 2.9), get the same account as compact JSON under the same auth prefix (`/k/<token>/api/...` or HTTP Basic):
+Small clients that cannot read OPDS or EPUB, such as the Xteink X4 Pro mini apps (the **Ink App** menu; Lua, XTOS Licorice API 2.9), get the same account as compact JSON under the same auth prefix (`/k/<token>/api/...` or HTTP Basic):
 
 | Path | Content |
 |---|---|
