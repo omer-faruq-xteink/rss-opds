@@ -7,6 +7,7 @@
 //   /api/feeds                                                           subscriptions with unread counts
 //   /api/article/<id>?max=<chars>&mark=1&images=1                        one article as text (images: see below)
 //   /api/mark/<id>?read=0|1                                              mark read / unread
+//   /api/read?url=<page>&title=<t>&max=<chars>                           any web page as text, through the full-text chain
 //   /api                                                                 title, accounts [{id, label}], switches
 // Every call takes ?acct=<id> to use another CommaFeed account (default: the first).
 // Lists, categories and feeds also carry "accounts", so a client stays current without asking /api.
@@ -245,6 +246,19 @@ async function handleApiInner({ path, url, cf, c, env, ctx, request, accounts, a
       text,
       ...(images ? { images } : {}),
     });
+  }
+
+  // Any article by its address (for apps that list links found elsewhere, such as Hacker News):
+  // the same full-text chain as ?full=1, 501 when none is configured, 404 when it finds nothing.
+  if (path === '/api/read') {
+    const target = url.searchParams.get('url') || '';
+    if (!/^https?:\/\/[^\s/]+/i.test(target)) return json({ error: 'url must be an http(s) address' }, 400);
+    if (!c.chain.length) return json({ error: 'no full-text service configured' }, 501);
+    const max = clampInt(url.searchParams.get('max'), TEXT_DEFAULT, 500, TEXT_MAX);
+    const cache = typeof caches !== 'undefined' ? caches.default : null;
+    const full = await extractFullText(env, c.chain, { url: target, title: url.searchParams.get('title') || '' }, { cache, waitUntil: (p) => ctx.waitUntil(p) });
+    if (!full) return json({ error: 'no text found', url: target }, 404);
+    return json({ url: target, source: full.source, text: htmlToText(full.html, max) });
   }
 
   if ((m = /^\/api\/mark\/(\d+)$/.exec(path))) {

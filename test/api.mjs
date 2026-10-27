@@ -60,5 +60,24 @@ r = await (await call('/api')).json();
 check('api root', r.page_size === 20 && r.kinds.includes('unread'));
 check('listItem untitled', listItem({ id: '1', content: '' }).title === '(untitled)');
 
+// /api/read: any page through the full-text chain
+check('read needs a url', (await call('/api/read', '?url=ftp://x')).status === 400);
+check('read without a chain', (await call('/api/read', '?url=https://e.example/a')).status === 501);
+const realFetch = globalThis.fetch;
+const asked = [];
+globalThis.fetch = async (u, init) => {
+  const body = JSON.parse(init.body);
+  asked.push(body.url);
+  const html = body.url.endsWith('/empty') ? '' : '<h2>Story</h2><p>' + 'Full text here. '.repeat(30) + '</p>';
+  return new Response(JSON.stringify({ html }), { headers: { 'content-type': 'application/json' } });
+};
+c.chain = ['instaparser'];
+const readCall = (qs) => handleApi({ path: '/api/read', url: new URL('https://w.example/api/read' + qs), cf, c, env: { INSTAPARSER_TOKEN: 't' }, ctx, request: new Request('https://w.example/api/read') });
+r = await (await readCall('?url=' + encodeURIComponent('https://news.example/a?b=1') + '&max=600')).json();
+check('read gives text', r.source === 'instaparser' && r.text.startsWith('# Story\n\nFull text here.') && r.text.length <= 601 && asked[0] === 'https://news.example/a?b=1', JSON.stringify(r).slice(0, 200));
+check('read finds nothing', (await readCall('?url=https://news.example/empty')).status === 404);
+globalThis.fetch = realFetch;
+c.chain = [];
+
 console.log(`\n${failures} failure(s)`);
 process.exit(failures ? 1 : 0);
