@@ -66,15 +66,25 @@ check('read without a chain', (await call('/api/read', '?url=https://e.example/a
 const realFetch = globalThis.fetch;
 const asked = [];
 globalThis.fetch = async (u, init) => {
+  if (String(u).endsWith('/pic.png')) {                    // the image size sniff: a 1200x800 PNG
+    const b = new Uint8Array(40);
+    b.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+    new DataView(b.buffer).setUint32(16, 1200); new DataView(b.buffer).setUint32(20, 800);
+    return new Response(b, { status: 206 });
+  }
   const body = JSON.parse(init.body);
   asked.push(body.url);
-  const html = body.url.endsWith('/empty') ? '' : '<h2>Story</h2><p>' + 'Full text here. '.repeat(30) + '</p>';
+  const html = body.url.endsWith('/empty') ? '' : '<h2>Story</h2><p>' + 'Full text here. '.repeat(30) + '</p><p><img src="/pic.png" alt="A chart"></p><p>After.</p>';
   return new Response(JSON.stringify({ html }), { headers: { 'content-type': 'application/json' } });
 };
 c.chain = ['instaparser'];
 const readCall = (qs) => handleApi({ path: '/api/read', url: new URL('https://w.example/api/read' + qs), cf, c, env: { INSTAPARSER_TOKEN: 't' }, ctx, request: new Request('https://w.example/api/read') });
 r = await (await readCall('?url=' + encodeURIComponent('https://news.example/a?b=1') + '&max=600')).json();
 check('read gives text', r.source === 'instaparser' && r.text.startsWith('# Story\n\nFull text here.') && r.text.length <= 601 && asked[0] === 'https://news.example/a?b=1', JSON.stringify(r).slice(0, 200));
+check('read without images: no markers', !r.text.includes('[[img') && r.images === undefined);
+r = await (await readCall('?url=https://news.example/b&images=1')).json();
+check('read with images', r.text.includes('[[img:1]]') && r.text.endsWith('After.') && r.images.length === 1 && r.images[0].w === 456 && r.images[0].h === 304
+  && r.images[0].src.includes(encodeURIComponent('https://news.example/pic.png')) && r.images[0].alt === 'A chart', JSON.stringify(r).slice(-300));
 check('read finds nothing', (await readCall('?url=https://news.example/empty')).status === 404);
 globalThis.fetch = realFetch;
 c.chain = [];

@@ -7,7 +7,7 @@
 //   /api/feeds                                                           subscriptions with unread counts
 //   /api/article/<id>?max=<chars>&mark=1&images=1                        one article as text (images: see below)
 //   /api/mark/<id>?read=0|1                                              mark read / unread
-//   /api/read?url=<page>&title=<t>&max=<chars>                           any web page as text, through the full-text chain
+//   /api/read?url=<page>&max=<chars>&images=1                            any web page as text, through the full-text chain
 //   /api                                                                 title, accounts [{id, label}], switches
 // Every call takes ?acct=<id> to use another CommaFeed account (default: the first).
 // Lists, categories and feeds also carry "accounts", so a client stays current without asking /api.
@@ -81,6 +81,34 @@ export function listItem(e) {
 // the accounts of this Worker as the API shows them
 function accountList(accounts) {
   return (accounts || []).map((a) => ({ id: String(a.n), label: a.label }));
+}
+
+// ?images=1: each image becomes a "[[img:N]]" paragraph in the text, described in images[]
+// ({n, w, h, src}): src is a resizer URL the device fetches itself (the resizer refuses
+// Workers), which returns a greyscale JPEG of exactly w x h (see images.js).
+async function textAndImages(html, pageUrl, max, withImages, ctx) {
+  if (!withImages) return { text: htmlToText(html, max) };
+  const found = collectImages(html, pageUrl);
+  let marked = '';
+  let last = 0;
+  for (const im of found) { marked += html.slice(last, im.start) + `<p>[[img:${im.n}]]</p>`; last = im.end; }
+  marked += html.slice(last);
+  let text = htmlToText(marked, max).replace(/\[\[img:\d*\]?$/, '');
+  const present = found.filter((im) => text.includes(`[[img:${im.n}]]`));
+  const cache = typeof caches !== 'undefined' ? caches.default : null;
+  const sizes = await Promise.all(present.map((im) => sniffSize(im.src, { cache, waitUntil: (p) => ctx.waitUntil(p) })));
+  const images = [];
+  present.forEach((im, i) => {
+    const size = sizes[i];
+    // icons and emoji (WordPress serves them as 72x72 images) are left out
+    if (size && size.w <= TINY_IMAGE && size.h <= TINY_IMAGE) {
+      text = text.replace(`[[img:${im.n}]]`, '').replace(/\n{3,}/g, '\n\n');
+      return;
+    }
+    const d = deviceImage(im.src, size);
+    images.push({ n: im.n, w: d.w, h: d.h, src: d.url, ...(im.alt ? { alt: im.alt } : {}) });
+  });
+  return { text, images };
 }
 
 function json(obj, status = 200) {
@@ -207,34 +235,7 @@ async function handleApiInner({ path, url, cf, c, env, ctx, request, accounts, a
     if (wantMark && request.method === 'GET') {
       ctx.waitUntil(cf.markRead(id).catch((e) => console.error('markRead failed', e && e.message)));
     }
-    // ?images=1: each image becomes a "[[img:N]]" paragraph in the text, described in images[]
-    // ({n, w, h, src}): src is a resizer URL the device fetches itself (the resizer refuses
-    // Workers), which returns a greyscale JPEG of exactly w x h (see images.js).
-    let text;
-    let images;
-    if (url.searchParams.get('images') === '1') {
-      const found = collectImages(html, entry.url);
-      let marked = '';
-      let last = 0;
-      for (const im of found) { marked += html.slice(last, im.start) + `<p>[[img:${im.n}]]</p>`; last = im.end; }
-      marked += html.slice(last);
-      text = htmlToText(marked, max).replace(/\[\[img:\d*\]?$/, '');
-      const present = found.filter((im) => text.includes(`[[img:${im.n}]]`));
-      const sizes = await Promise.all(present.map((im) => sniffSize(im.src, { cache: caches.default, waitUntil: (p) => ctx.waitUntil(p) })));
-      images = [];
-      present.forEach((im, i) => {
-        const size = sizes[i];
-        // icons and emoji (WordPress serves them as 72x72 images) are left out
-        if (size && size.w <= TINY_IMAGE && size.h <= TINY_IMAGE) {
-          text = text.replace(`[[img:${im.n}]]`, '').replace(/\n{3,}/g, '\n\n');
-          return;
-        }
-        const d = deviceImage(im.src, size);
-        images.push({ n: im.n, w: d.w, h: d.h, src: d.url, ...(im.alt ? { alt: im.alt } : {}) });
-      });
-    } else {
-      text = htmlToText(html, max);
-    }
+    const { text, images } = await textAndImages(html, entry.url, max, url.searchParams.get('images') === '1', ctx);
     return json({
       id: String(id),
       title: entry.title || '(untitled)',
@@ -258,7 +259,8 @@ async function handleApiInner({ path, url, cf, c, env, ctx, request, accounts, a
     const cache = typeof caches !== 'undefined' ? caches.default : null;
     const full = await extractFullText(env, c.chain, { url: target, title: url.searchParams.get('title') || '' }, { cache, waitUntil: (p) => ctx.waitUntil(p) });
     if (!full) return json({ error: 'no text found', url: target }, 404);
-    return json({ url: target, source: full.source, text: htmlToText(full.html, max) });
+    const { text, images } = await textAndImages(full.html, target, max, url.searchParams.get('images') === '1', ctx);
+    return json({ url: target, source: full.source, text, ...(images ? { images } : {}) });
   }
 
   if ((m = /^\/api\/mark\/(\d+)$/.exec(path))) {

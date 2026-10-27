@@ -52,7 +52,7 @@ Small clients that cannot read OPDS or EPUB, such as the Xteink X4 Pro mini apps
 | `/api/article/<id>?max=<chars>&mark=1` | One article as plain text: `{id, title, feed, author, date, url, source, text}`; `mark=1` marks it read |
 | `/api/mark/<id>?read=0\|1` | Mark read / unread |
 | `/api/article/<id>?images=1` | Also images: each one is a `[[img:N]]` paragraph in `text`, described in `images: [{n, w, h, src}]`; `src` returns a greyscale JPEG of exactly `w`×`h` (at most 456 px wide) |
-| `/api/read?url=<address>&max=<chars>` | Any web page as plain text through the full-text chain (`{url, source, text}`), for apps that list links from elsewhere (Hacker News); 501 without a chain, 404 when nothing is found |
+| `/api/read?url=<address>&max=<chars>&images=1` | Any web page as plain text through the full-text chain (`{url, source, text}`; `images=1` adds `images` as for articles), for apps that list links from elsewhere (Hacker News); 501 without a chain, 404 when nothing is found |
 
 `/api` returns the catalog title and the configured accounts (`accounts: [{id, label}]`; lists, categories and feeds carry the same field, so a client stays current without asking `/api`); every call takes `?acct=<id>` (default: the first account). `?full=1` works here too: the text comes from the sanitizer chain when one is configured. Image `src` URLs point at the free [images.weserv.nl](https://images.weserv.nl) resizer, which the client fetches itself (it refuses requests from Cloudflare Workers); the Worker only reads the first bytes of each original to know the resulting size, and when it cannot, the image is fitted into a 456×342 box. The Xteink client lives in the [touch-licorice-apps](https://github.com/omer-faruq-xteink/touch-licorice-apps) repo.
 
