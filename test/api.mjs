@@ -68,6 +68,7 @@ check('star without feed', calls.at(-1).join() === 'star,106,true,');
 r = await (await call('/api/tags')).json();
 check('tags sorted', r.items.map((x) => x.name).join() === 'alpha,zeta' && r.editable === true);
 r = await (await call('/api/tag/107', '?tags=' + encodeURIComponent(' to read , work,to read,,'))).json();
+check('set tags answers tag_line', r.tag_line === 'to read, work', r.tag_line);
 check('set tags trimmed, no repeats', r.ok && JSON.stringify(calls.at(-1)) === '["tag","107",["to read","work"]]', JSON.stringify(calls.at(-1)));
 await call('/api/list', '?kind=tag&id=' + encodeURIComponent('to read'));
 const tq = calls.filter((x) => x[0] === 'entries').at(-1)[1];
@@ -80,7 +81,9 @@ r = await (await call('/api')).json();
 check('api root', r.page_size === 20 && r.kinds.includes('tag') && r.tag_edit === false);
 cf.canEditTags = true;
 const li = listItem(normalizeRestEntry({ id: 5, feedId: 11, tags: ['x'], content: '' }));
-check('list item feed_id and tags', li.feed_id === '11' && li.tags.join() === 'x' && !('tags' in listItem(normalizeRestEntry({ id: 6, content: '' }))));
+const li2 = listItem(normalizeRestEntry({ id: 6, content: '' }));
+check('list item feed_id and tags', li.feed_id === '11' && li.tags.join() === 'x' && li.tag_line === 'x' && !('tags' in li2) && li2.tag_line === '');
+check('tag_line joins', listItem(normalizeRestEntry({ id: 7, tags: ['a b', 'c'], content: '' })).tag_line === 'a b, c');
 
 // the CommaFeed client: which call star and tags make with an API key / with a password
 {

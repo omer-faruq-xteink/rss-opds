@@ -53,7 +53,7 @@ Small clients that cannot read OPDS or EPUB, such as the Xteink X4 Pro mini apps
 | `/api/mark/<id>?read=0\|1` | Mark read / unread |
 | `/api/star/<id>?on=0\|1&feed=<feed_id>` | Star / unstar (`feed_id` comes with each list item) |
 | `/api/tags` | Tag names: `{items:[{name}], editable}` |
-| `/api/list?kind=tag&id=<tag>` | Articles with that tag (read and unread); list items carry `tags` when they have any |
+| `/api/list?kind=tag&id=<tag>` | Articles with that tag (read and unread); list items carry `tags` when they have any, and always `tag_line` (the same, comma-separated) |
 | `/api/tag/<id>?tags=a,b` | Replace an article's tags. Needs `COMMAFEED_USER` + `COMMAFEED_PASSWORD`: CommaFeed takes the API key only for reading, so with a key this answers 501 (`editable` and `tag_edit` in `/api` say so) |
 | `/api/article/<id>?images=1` | Also images: each one is a `[[img:N]]` paragraph in `text`, described in `images: [{n, w, h, src}]`; `src` returns a greyscale JPEG of exactly `w`×`h` (at most 456 px wide) |
 | `/api/read?url=<address>&max=<chars>&images=1` | Any web page as plain text through the full-text chain (`{url, source, text}`; `images=1` adds `images` as for articles), for apps that list links from elsewhere (Hacker News); 501 without a chain, 404 when nothing is found |

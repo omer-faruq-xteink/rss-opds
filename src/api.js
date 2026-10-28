@@ -79,6 +79,9 @@ export function listItem(e) {
     starred: !!e.starred,
     feed_id: e.feedId || '',
     ...(e.tags && e.tags.length ? { tags: e.tags } : {}),
+    // the same tags as one string, always present: the Xteink reader's JSON decoder drops the
+    // tags array inside list items, so the mini app reads this one
+    tag_line: (e.tags || []).join(', '),
     excerpt: excerpt(e.content),
   };
 }
@@ -294,7 +297,7 @@ async function handleApiInner({ path, url, cf, c, env, ctx, request, accounts, a
     const seen = new Set();
     const tags = (url.searchParams.get('tags') || '').split(',').map((t) => t.trim()).filter((t) => t && !seen.has(t) && seen.add(t));
     await cf.setTags(m[1], tags);
-    return json({ ok: true, id: m[1], tags });
+    return json({ ok: true, id: m[1], tags, tag_line: tags.join(', ') });
   }
 
   return json({ error: 'not found' }, 404);
