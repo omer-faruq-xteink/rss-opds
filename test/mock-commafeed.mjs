@@ -19,7 +19,7 @@ const entries = Array.from({ length: 45 }, (_, i) => ({
   read: i % 5 === 0,
   starred: i % 7 === 0,
   markable: true,
-  tags: [],
+  tags: i % 4 === 0 ? ['later'] : [],
 }));
 let marked = [];
 
@@ -55,6 +55,8 @@ createServer((req, res) => {
     else if (id !== 'all') list = list.filter((e) => e.feedId === '10');
     if (readType === 'unread' && id !== 'starred' && !kw) list = list.filter((e) => !e.read);
     if (kw) list = list.filter((e) => e.title.toLowerCase().includes(kw));
+    const tag = url.searchParams.get('tag');
+    if (tag) list = entries.filter((e) => e.tags.includes(tag));
     const pageItems = list.slice(offset, offset + limit);
     return json(res, { name: id, timestamp: Date.now(), hasMore: offset + limit < list.length, offset, limit, entries: pageItems, ignoredReadStatus: false });
   }
@@ -80,6 +82,9 @@ createServer((req, res) => {
       console.log('  edit-tag', body);
       if (p.get('T') !== 'tok123') return json(res, {}, 401);
       marked.push(p.get('i'));
+      const e = entries.find((x) => x.id === p.get('i'));
+      const st = 'user/-/state/com.google/starred';
+      if (e && (p.get('a') === st || p.get('r') === st)) e.starred = p.get('a') === st;
       res.writeHead(200, { 'content-type': 'text/plain' });
       res.end('OK');
     });
@@ -92,6 +97,21 @@ createServer((req, res) => {
       const p = JSON.parse(body || '{}');
       console.log('  entry/mark', body);
       marked.push(`basic:${p.id}`);
+      res.writeHead(200);
+      res.end();
+    });
+    return;
+  }
+  if (url.pathname === '/rest/entry/tags') return json(res, [...new Set(entries.flatMap((e) => e.tags))]);
+  if ((url.pathname === '/rest/entry/star' || url.pathname === '/rest/entry/tag') && req.method === 'POST') {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', () => {
+      const p = JSON.parse(body || '{}');
+      console.log(' ', url.pathname, body);
+      const e = entries.find((x) => x.id === String(p.id || p.entryId));
+      if (e && 'starred' in p) e.starred = !!p.starred;
+      if (e && p.tags) e.tags = p.tags;
       res.writeHead(200);
       res.end();
     });

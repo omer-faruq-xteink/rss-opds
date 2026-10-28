@@ -1,6 +1,7 @@
 // Offline test of the JSON API: htmlToText and handleApi against a fake CommaFeed client.
 // Run: node test/api.mjs
 import { handleApi, htmlToText, listItem } from '../src/api.js';
+import { CommaFeed, normalizeRestEntry } from '../src/commafeed.js';
 
 let failures = 0;
 const check = (name, cond, extra = '') => {
@@ -30,6 +31,10 @@ const cf = {
   async getEntry(id) { const e = entries.find((x) => x.id === id); return e ? { ...e, date: new Date(e.date) } : null; },
   async findEntryByScan() { return null; },
   async markRead(id, read) { calls.push(['mark', id, read]); },
+  async star(id, on, feed) { calls.push(['star', id, on, feed]); },
+  async tags() { return ['zeta', 'alpha']; },
+  async setTags(id, tags) { calls.push(['tag', id, tags]); },
+  canEditTags: true,
 };
 const c = { title: 'T', pageSize: 30, fullText: false, chain: [], markRead: false };
 const ctx = { waitUntil(p) { p.catch(() => {}); } };
@@ -56,8 +61,55 @@ check('article ?mark=1 marks read', calls.some((x) => x[0] === 'mark' && x[1] ==
 check('article 404', (await call('/api/article/999')).status === 404);
 r = await (await call('/api/mark/105', '?read=0')).json();
 check('mark unread', r.ok === true && calls.at(-1)[1] === '105' && calls.at(-1)[2] === false);
+r = await (await call('/api/star/105', '?on=0&feed=11')).json();
+check('unstar', r.ok === true && r.starred === false && calls.at(-1).join() === 'star,105,false,11');
+await call('/api/star/106');
+check('star without feed', calls.at(-1).join() === 'star,106,true,');
+r = await (await call('/api/tags')).json();
+check('tags sorted', r.items.map((x) => x.name).join() === 'alpha,zeta' && r.editable === true);
+r = await (await call('/api/tag/107', '?tags=' + encodeURIComponent(' to read , work,to read,,'))).json();
+check('set tags trimmed, no repeats', r.ok && JSON.stringify(calls.at(-1)) === '["tag","107",["to read","work"]]', JSON.stringify(calls.at(-1)));
+await call('/api/list', '?kind=tag&id=' + encodeURIComponent('to read'));
+const tq = calls.filter((x) => x[0] === 'entries').at(-1)[1];
+check('tag list', tq.tag === 'to read' && tq.id === 'all' && tq.readType === 'all' && tq.title === 'to read');
+check('tag list needs a name', (await call('/api/list', '?kind=tag')).status === 400);
+cf.canEditTags = false;
+const before = calls.length;
+check('tags read-only with an API key', (await call('/api/tag/107', '?tags=a')).status === 501 && calls.length === before);
 r = await (await call('/api')).json();
-check('api root', r.page_size === 20 && r.kinds.includes('unread'));
+check('api root', r.page_size === 20 && r.kinds.includes('tag') && r.tag_edit === false);
+cf.canEditTags = true;
+const li = listItem(normalizeRestEntry({ id: 5, feedId: 11, tags: ['x'], content: '' }));
+check('list item feed_id and tags', li.feed_id === '11' && li.tags.join() === 'x' && !('tags' in listItem(normalizeRestEntry({ id: 6, content: '' }))));
+
+// the CommaFeed client: which call star and tags make with an API key / with a password
+{
+  const realFetch0 = globalThis.fetch;
+  const sent = [];
+  globalThis.fetch = async (u, init = {}) => {
+    sent.push([init.method || 'GET', String(u).replace(/^https:\/\/cf\.example\/rest/, ''), init.body ? String(init.body) : '']);
+    if (String(u).includes('/token')) return new Response('tok');
+    if (String(u).includes('/entry/tags')) return new Response('["a","b"]', { headers: { 'content-type': 'application/json' } });
+    return new Response('OK');
+  };
+  const key = new CommaFeed({ baseUrl: 'https://cf.example', apiKey: 'k' });
+  await key.star(9, true, '11');
+  check('API key: star through the Reader API', sent.at(-1)[1].startsWith('/googlereader/reader/api/0/edit-tag') && sent.at(-1)[2] === 'i=9&a=user%2F-%2Fstate%2Fcom.google%2Fstarred&T=tok', JSON.stringify(sent.at(-1)));
+  await key.star(9, false);
+  check('API key: unstar', sent.at(-1)[2] === 'i=9&r=user%2F-%2Fstate%2Fcom.google%2Fstarred&T=tok');
+  check('API key: tag names', (await key.tags()).join() === 'a,b' && sent.at(-1)[1].startsWith('/entry/tags?apiKey=k'));
+  let threw = null;
+  try { await key.setTags(9, ['a']); } catch (e) { threw = e; }
+  check('API key: tags cannot be edited', !key.canEditTags && threw && threw.status === 501);
+  const pw = new CommaFeed({ baseUrl: 'https://cf.example', username: 'u', password: 'p' });
+  await pw.star(9, true, '11');
+  check('password: star through REST', sent.at(-1)[1] === '/entry/star' && sent.at(-1)[2] === '{"id":"9","feedId":11,"starred":true}', JSON.stringify(sent.at(-1)));
+  await pw.setTags(9, ['a', 'b']);
+  check('password: set tags', pw.canEditTags && sent.at(-1)[0] === 'POST' && sent.at(-1)[1] === '/entry/tag' && sent.at(-1)[2] === '{"entryId":9,"tags":["a","b"]}');
+  await key.markRead(9, false);
+  check('markRead still uses edit-tag', sent.at(-1)[2] === 'i=9&r=user%2F-%2Fstate%2Fcom.google%2Fread&T=tok');
+  globalThis.fetch = realFetch0;
+}
 check('listItem untitled', listItem({ id: '1', content: '' }).title === '(untitled)');
 
 // /api/read: any page through the full-text chain

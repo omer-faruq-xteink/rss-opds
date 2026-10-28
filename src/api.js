@@ -2,11 +2,14 @@
 // "Mini Apps" (Lua, API 2.9: HTTPS + JSON, ~1 MB of heap). Same auth and switches as
 // the catalog; every response is a compact JSON object, articles come as plain text.
 //
-//   /api/list?kind=unread|all|starred|category|feed&id=<id>&page=N&n=M   article list
+//   /api/list?kind=unread|all|starred|category|feed|tag&id=<id>&page=N&n=M   article list (tag: id is the tag name)
 //   /api/categories                                                      categories with unread counts
 //   /api/feeds                                                           subscriptions with unread counts
 //   /api/article/<id>?max=<chars>&mark=1&images=1                        one article as text (images: see below)
 //   /api/mark/<id>?read=0|1                                              mark read / unread
+//   /api/star/<id>?on=0|1&feed=<feed_id>                                 star / unstar
+//   /api/tags                                                            tag names, and whether they can be edited
+//   /api/tag/<id>?tags=a,b                                               replace an article's tags (needs user + password)
 //   /api/read?url=<page>&max=<chars>&images=1                            any web page as text, through the full-text chain
 //   /api                                                                 title, accounts [{id, label}], switches
 // Every call takes ?acct=<id> to use another CommaFeed account (default: the first).
@@ -74,6 +77,8 @@ export function listItem(e) {
     date: stamp(e.date),
     read: !!e.read,
     starred: !!e.starred,
+    feed_id: e.feedId || '',
+    ...(e.tags && e.tags.length ? { tags: e.tags } : {}),
     excerpt: excerpt(e.content),
   };
 }
@@ -154,7 +159,8 @@ async function handleApiInner({ path, url, cf, c, env, ctx, request, accounts, a
       accounts: accountList(accounts),
       account: acct ? String(acct.n) : '1',
       full_text: c.fullText,
-      kinds: ['unread', 'starred', 'all', 'category', 'feed'],
+      kinds: ['unread', 'starred', 'all', 'category', 'feed', 'tag'],
+      tag_edit: !!cf.canEditTags,
       page_size: Math.min(c.pageSize, LIST_DEFAULT),
     });
   }
@@ -172,6 +178,7 @@ async function handleApiInner({ path, url, cf, c, env, ctx, request, accounts, a
     else if (kind === 'starred') listing = { kind: 'category', id: 'starred', readType: 'all', title: 'Starred' };
     else if (kind === 'category' && /^\d+$/.test(id)) listing = { kind: 'category', id, readType: readAll ? 'all' : 'unread' };
     else if (kind === 'feed' && /^\d+$/.test(id)) listing = { kind: 'feed', id, readType: readAll ? 'all' : 'unread' };
+    else if (kind === 'tag' && id) listing = { kind: 'category', id: 'all', readType: 'all', title: id, tag: id };
     else if (kind === 'search') listing = { kind: 'category', id: 'all', readType: 'all', title: `Search: ${keywords || ''}` };
     else return json({ error: 'bad kind or id' }, 400);
     if (keywords) listing.keywords = keywords;
@@ -267,6 +274,27 @@ async function handleApiInner({ path, url, cf, c, env, ctx, request, accounts, a
     const read = url.searchParams.get('read') !== '0';
     await cf.markRead(m[1], read);
     return json({ ok: true, id: m[1], read });
+  }
+
+  if ((m = /^\/api\/star\/(\d+)$/.exec(path))) {
+    const on = url.searchParams.get('on') !== '0';
+    const feed = url.searchParams.get('feed') || '';
+    await cf.star(m[1], on, /^\d+$/.test(feed) ? feed : '');
+    return json({ ok: true, id: m[1], starred: on });
+  }
+
+  if (path === '/api/tags') {
+    const names = await cf.tags();
+    names.sort((a, b) => a.localeCompare(b));
+    return json({ items: names.map((name) => ({ name })), editable: !!cf.canEditTags, accounts: accountList(accounts) });
+  }
+
+  if ((m = /^\/api\/tag\/(\d+)$/.exec(path))) {
+    if (!cf.canEditTags) return json({ error: 'editing tags needs the CommaFeed username and password on the Worker' }, 501);
+    const seen = new Set();
+    const tags = (url.searchParams.get('tags') || '').split(',').map((t) => t.trim()).filter((t) => t && !seen.has(t) && seen.add(t));
+    await cf.setTags(m[1], tags);
+    return json({ ok: true, id: m[1], tags });
   }
 
   return json({ error: 'not found' }, 404);

@@ -93,8 +93,8 @@ export class CommaFeed {
    * List entries of a category ('all', 'starred' or a category id) or a subscription.
    * @returns {Promise<{name:string, entries:object[], hasMore:boolean}>}
    */
-  entries({ kind = 'category', id = 'all', readType = 'unread', offset = 0, limit = 30, keywords, order = 'desc' }) {
-    return this.rest(`/${kind}/entries`, { params: { id, readType, offset, limit, keywords, order } });
+  entries({ kind = 'category', id = 'all', readType = 'unread', offset = 0, limit = 30, keywords, order = 'desc', tag }) {
+    return this.rest(`/${kind}/entries`, { params: { id, readType, offset, limit, keywords, order, tag } });
   }
 
   /** Fetch one entry by numeric id via the Google Reader API. */
@@ -126,18 +126,51 @@ export class CommaFeed {
     return null;
   }
 
+  // add / remove one Google Reader state tag (read, starred) on an entry
+  async editTag(id, tag, add) {
+    const tokenRes = await this.reader('/token');
+    const token = (await tokenRes.text()).trim();
+    await this.reader('/edit-tag', {
+      method: 'POST',
+      form: { i: String(id), [add ? 'a' : 'r']: `user/-/state/com.google/${tag}`, T: token },
+    });
+  }
+
   async markRead(id, read = true) {
     if (this.basic) {
       await this.rest('/entry/mark', { method: 'POST', json: { id: String(id), read } });
       return;
     }
-    const tokenRes = await this.reader('/token');
-    const token = (await tokenRes.text()).trim();
-    const tag = 'user/-/state/com.google/read';
-    await this.reader('/edit-tag', {
-      method: 'POST',
-      form: { i: String(id), [read ? 'a' : 'r']: tag, T: token },
-    });
+    await this.editTag(id, 'read', read);
+  }
+
+  /** Star or unstar: REST needs the entry's subscription id, the Reader API does not. */
+  async star(id, starred = true, feedId = '') {
+    if (this.basic && feedId) {
+      await this.rest('/entry/star', { method: 'POST', json: { id: String(id), feedId: Number(feedId), starred } });
+      return;
+    }
+    await this.editTag(id, 'starred', starred);
+  }
+
+  /** Every tag the user has put on entries (names). */
+  async tags() {
+    const list = await this.rest('/entry/tags');
+    return Array.isArray(list) ? list.map(String) : [];
+  }
+
+  // CommaFeed takes the API key on GET only, and the Reader API has no entry tags
+  // (its labels are categories), so editing tags needs the username + password.
+  get canEditTags() {
+    return !!this.basic;
+  }
+
+  /** Replace an entry's tags. */
+  async setTags(id, tags) {
+    if (!this.basic) {
+      throw new CommaFeedError('Editing tags needs COMMAFEED_USER + COMMAFEED_PASSWORD (the API key is read-only)', 501);
+    }
+    await this.rest('/entry/tag', { method: 'POST', json: { entryId: Number(id), tags } });
   }
 }
 
@@ -155,5 +188,6 @@ export function normalizeRestEntry(e) {
     starred: !!e.starred,
     enclosureUrl: e.enclosureUrl || '',
     enclosureType: e.enclosureType || '',
+    tags: Array.isArray(e.tags) ? e.tags.map(String) : [],
   };
 }
