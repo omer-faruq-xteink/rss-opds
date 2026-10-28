@@ -82,7 +82,7 @@ check('api root', r.page_size === 20 && r.kinds.includes('tag') && r.tag_edit ==
 cf.canEditTags = true;
 const li = listItem(normalizeRestEntry({ id: 5, feedId: 11, tags: ['x'], content: '' }));
 const li2 = listItem(normalizeRestEntry({ id: 6, content: '' }));
-check('list item feed_id and tags', li.feed_id === '11' && li.tags.join() === 'x' && li.tag_line === 'x' && !('tags' in li2) && li2.tag_line === '');
+check('list item feed_id and tag_line, no array', li.feed_id === '11' && li.tag_line === 'x' && !('tags' in li) && li2.tag_line === '');
 check('tag_line joins', listItem(normalizeRestEntry({ id: 7, tags: ['a b', 'c'], content: '' })).tag_line === 'a b, c');
 
 // the CommaFeed client: which call star and tags make with an API key / with a password

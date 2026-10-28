@@ -45,7 +45,7 @@ Small clients that cannot read OPDS or EPUB, such as the Xteink X4 Pro mini apps
 
 | Path | Content |
 |---|---|
-| `/api/list?kind=unread\|starred\|all&page=N&n=M` | Article list: `{title, page, has_more, items:[{id, title, feed, feed_id, date, read, starred, tags, excerpt}]}` (excerpt: up to 400 characters of plain text) |
+| `/api/list?kind=unread\|starred\|all&page=N&n=M` | Article list: `{title, page, has_more, items:[{id, title, feed, feed_id, date, read, starred, tag_line, excerpt}]}` (excerpt: up to 400 characters of plain text) |
 | `/api/list?kind=category\|feed&id=<id>` | Same for one category or subscription (`&read=all` includes read ones) |
 | `/api/list?kind=search&q=word` | Keyword search |
 | `/api/categories`, `/api/feeds` | `{items:[{id, name, unread, ...}]}` |
@@ -53,7 +53,7 @@ Small clients that cannot read OPDS or EPUB, such as the Xteink X4 Pro mini apps
 | `/api/mark/<id>?read=0\|1` | Mark read / unread |
 | `/api/star/<id>?on=0\|1&feed=<feed_id>` | Star / unstar (`feed_id` comes with each list item) |
 | `/api/tags` | Tag names: `{items:[{name}], editable}` |
-| `/api/list?kind=tag&id=<tag>` | Articles with that tag (read and unread); list items carry `tags` when they have any, and always `tag_line` (the same, comma-separated) |
+| `/api/list?kind=tag&id=<tag>` | Articles with that tag (read and unread); list items carry their tags as `tag_line` (comma-separated, empty when none) |
 | `/api/tag/<id>?tags=a,b` | Replace an article's tags. Needs `COMMAFEED_USER` + `COMMAFEED_PASSWORD`: CommaFeed takes the API key only for reading, so with a key this answers 501 (`editable` and `tag_edit` in `/api` say so) |
 | `/api/article/<id>?images=1` | Also images: each one is a `[[img:N]]` paragraph in `text`, described in `images: [{n, w, h, src}]`; `src` returns a greyscale JPEG of exactly `w`×`h` (at most 456 px wide) |
 | `/api/read?url=<address>&max=<chars>&images=1` | Any web page as plain text through the full-text chain (`{url, source, text}`; `images=1` adds `images` as for articles), for apps that list links from elsewhere (Hacker News); 501 without a chain, 404 when nothing is found |
