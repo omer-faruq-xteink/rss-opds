@@ -60,6 +60,16 @@ Small clients that cannot read OPDS or EPUB, such as the Xteink X4 Pro mini apps
 
 `/api` returns the catalog title and the configured accounts (`accounts: [{id, label}]`; lists, categories and feeds carry the same field, so a client stays current without asking `/api`); every call takes `?acct=<id>` (default: the first account). `?full=1` works here too: the text comes from the sanitizer chain when one is configured. Image `src` URLs point at the free [images.weserv.nl](https://images.weserv.nl) resizer, which the client fetches itself (it refuses requests from Cloudflare Workers); the Worker only reads the first bytes of each original to know the resulting size, and when it cannot, the image is fitted into a 456×342 box. The Xteink client lives in the [touch-licorice-apps](https://github.com/omer-faruq-xteink/touch-licorice-apps) repo.
 
+### Readwise Reader relay
+
+The Xteink reader sends only GET and POST, while Readwise Reader changes a document (archive, move, tags, seen) only by `PATCH`. The Readwise mini app reads Reader directly and posts its changes to the Worker, which passes them on as `PATCH`:
+
+| Path | Content |
+|---|---|
+| `POST /readwise/update/<document id>` | Body: the JSON of Reader's [update endpoint](https://readwise.io/reader_api) (`{"location":"archive"}`, `{"tags":["a","b"]}`, `{"seen":true}`); header `X-Readwise-Token: <your Reader access token>`. Sent on as `PATCH https://readwise.io/api/v3/update/<id>/`; Reader's status, answer and `Retry-After` come back as they are |
+
+It sits behind the same authentication as the rest (`/k/<token>/readwise/...` or HTTP Basic), needs no CommaFeed account, relays nothing but that endpoint and keeps nothing: the Reader token comes with each request.
+
 ## Setup (about 10 minutes)
 
 ### 1. CommaFeed API key

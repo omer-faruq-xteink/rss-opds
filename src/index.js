@@ -16,6 +16,7 @@
 //   /yd/<encoded path>/<name>.epub  download of such a file, proxied
 //   /health                unauthenticated liveness check
 //   /api/...               JSON API for small clients (lists, articles as text, mark read); see api.js
+//   POST /readwise/update/<id>  relay of a Readwise Reader change (PATCH) for the mini app; see readwise.js
 // Every route takes ?acct=N to use CommaFeed account N (see accounts.js); without it, account 1.
 // With more than one account the catalog root lists the accounts as folders.
 import { CommaFeed, CommaFeedError, normalizeRestEntry } from './commafeed.js';
@@ -26,6 +27,7 @@ import { textExcerpt } from './html.js';
 import { configuredChain, extractFullText } from './sanitizers.js';
 import { handleApi } from './api.js';
 import { accountsFromEnv, pickAccount } from './accounts.js';
+import { handleReadwise } from './readwise.js';
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
@@ -123,10 +125,13 @@ function cfg(env) {
 async function handle(request, env, ctx) {
   const url = new URL(request.url);
   if (url.pathname === '/health') return text('ok');
-  if (request.method !== 'GET' && request.method !== 'HEAD') return text('Method not allowed', 405);
 
   const auth = authenticate(request, env, url.pathname);
   if (auth instanceof Response) return auth;
+  // the Readwise relay (POST) needs no CommaFeed account; everything else is GET
+  const relayed = await handleReadwise(request, auth.path);
+  if (relayed) return relayed;
+  if (request.method !== 'GET' && request.method !== 'HEAD') return text('Method not allowed', 405);
 
   const c = cfg(env);
   // Per-request image switch: ?images=1 / ?images=0 overrides INCLUDE_IMAGES and is
