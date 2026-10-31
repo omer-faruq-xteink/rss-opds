@@ -144,5 +144,42 @@ check('read finds nothing', (await readCall('?url=https://news.example/empty')).
 globalThis.fetch = realFetch;
 c.chain = [];
 
+// /api/feed: a feed the reader cannot take, without CommaFeed
+const bigItems = Array.from({ length: 50 }, (_, i) => `<item><title><![CDATA[Item <${i}>]]></title><link>/p/${i}</link><guid isPermaLink="false">g${i}</guid>`
+  + `<pubDate>${new Date(Date.UTC(2026, 9, 1 + (i % 28), 12)).toUTCString()}</pubDate><description>Short &amp; sweet ${i}</description>`
+  + `<content:encoded><![CDATA[<p>Body ${i} ${'y'.repeat(20000)}</p>]]></content:encoded></item>`).join('');
+const rssBody = `<?xml version="1.0"?><rss version="2.0"><channel><title>Big &amp; Co</title><link>https://big.example/</link>${bigItems}</channel></rss>`;
+const atomBody = `<feed xmlns="http://www.w3.org/2005/Atom"><title>Atom One</title><link rel="self" href="https://a.example/feed"/><link href="https://a.example/"/>`
+  + `<entry><title type="html">A <![CDATA[&]]> B &amp; C</title><link rel="alternate" href="https://a.example/1"/><id>tag:a,1</id><updated>2026-10-30T10:00:00Z</updated><summary>Sum</summary></entry></feed>`;
+const fetched = [];
+globalThis.fetch = async (u) => {
+  fetched.push(String(u));
+  if (String(u).includes('big.example')) return new Response(rssBody, { headers: { 'content-type': 'application/rss+xml' } });
+  if (String(u).includes('a.example')) return new Response(atomBody);
+  if (String(u).includes('page.example')) return new Response('<html>no feed</html>');
+  return new Response('gone', { status: 410 });
+};
+const feedCall = (qs) => handleApi({ path: '/api/feed', url: new URL('https://w.example/api/feed' + qs), cf, c, env: {}, ctx, request: new Request('https://w.example/api/feed') });
+check('feed needs a url', (await feedCall('?url=ftp://x')).status === 400);
+r = await (await feedCall('?n=40&url=' + encodeURIComponent('https://big.example/feed'))).json();
+check('feed: newest 40 of 50', r.title === 'Big & Co' && r.total === 50 && r.items.length === 40 && r.items.every((x, i) => i === 0 || x.date <= r.items[i - 1].date), JSON.stringify(r).slice(0, 200));
+const i27 = r.items.find((x) => x.id === 'g27');
+check('feed: item fields', i27 && i27.title === 'Item <27>' && i27.link === 'https://big.example/p/27' && i27.excerpt === 'Short & sweet 27' && i27.has_content === true
+  && i27.date === Date.UTC(2026, 9, 28, 12) / 1000, JSON.stringify(i27));
+check('feed: small answer', JSON.stringify(r).length < 20000, String(JSON.stringify(r).length));
+r = await (await feedCall('?url=https://big.example/feed&id=g3&max=600')).json();
+check('feed: one item as text', r.id === 'g3' && r.source === 'feed' && r.text.startsWith('Body 3 yyy') && r.text.length <= 601 && r.url === 'https://big.example/p/3', JSON.stringify(r).slice(0, 200));
+check('feed: item gone', (await feedCall('?url=https://big.example/feed&id=nope')).status === 404);
+r = await (await feedCall('?url=https://a.example/feed')).json();
+check('feed: atom', r.title === 'Atom One' && r.link === 'https://a.example/' && r.items[0].id === 'tag:a,1' && r.items[0].title === 'A & B & C'
+  && r.items[0].link === 'https://a.example/1' && r.items[0].has_content === false && r.items[0].excerpt === 'Sum', JSON.stringify(r));
+check('feed: not a feed', (await feedCall('?url=https://page.example/')).status === 422);
+check('feed: server error', (await feedCall('?url=https://x.example/')).status === 502);
+globalThis.fetch = realFetch;
+r = await (await handleApi({ path: '/api', url: new URL('https://w.example/api'), cf, c, env: {}, ctx, request: new Request('https://w.example/api'), accounts: [{ n: 1, label: 'Account 1' }], acct: { n: 1 } })).json();
+check('api: no CommaFeed account', r.commafeed === false, JSON.stringify(r));
+r = await (await handleApi({ path: '/api', url: new URL('https://w.example/api'), cf, c, env: {}, ctx, request: new Request('https://w.example/api'), accounts: [{ n: 1, label: 'A' }], acct: { n: 1, baseUrl: 'https://cf.example', apiKey: 'k' } })).json();
+check('api: CommaFeed account', r.commafeed === true, JSON.stringify(r));
+
 console.log(`\n${failures} failure(s)`);
 process.exit(failures ? 1 : 0);

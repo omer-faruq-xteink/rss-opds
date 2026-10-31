@@ -11,12 +11,15 @@
 //   /api/tags                                                            tag names, and whether they can be edited
 //   /api/tag/<id>?tags=a,b                                               replace an article's tags (needs user + password)
 //   /api/read?url=<page>&max=<chars>&images=1                            any web page as text, through the full-text chain
+//   /api/feed?url=<feed>&n=M                                             a feed's newest items (no CommaFeed needed)
+//   /api/feed?url=<feed>&id=<item id>&max=<chars>&images=1               one item of that feed as text
 //   /api                                                                 title, accounts [{id, label}], switches
 // Every call takes ?acct=<id> to use another CommaFeed account (default: the first).
 // Lists, categories and feeds also carry "accounts", so a client stays current without asking /api.
 import { CommaFeedError, normalizeRestEntry } from './commafeed.js';
 import { decodeEntities } from './html.js';
 import { extractFullText } from './sanitizers.js';
+import { parseFeed } from './feed.js';
 import { collectImages, deviceImage, sniffSize } from './images.js';
 
 const LIST_DEFAULT = 20;
@@ -24,6 +27,9 @@ const LIST_MAX = 40;
 const EXCERPT_CHARS = 400;   // enough for a preview on the device; 12 items stay a few KB
 const TEXT_DEFAULT = 20000;
 const TEXT_MAX = 60000;
+const FEED_EXCERPT_CHARS = 300;
+const FEED_MAX_BYTES = 8 * 1024 * 1024;
+const FEED_ACCEPT = 'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.9, */*;q=0.5';
 const TINY_IMAGE = 80;          // px; images no larger than this in both directions are left out
 
 /**
@@ -160,6 +166,8 @@ async function handleApiInner({ path, url, cf, c, env, ctx, request, accounts, a
       // CommaFeed accounts of this Worker; pass ?acct=<id> on every call (default: the first)
       accounts: accountList(accounts),
       account: acct ? String(acct.n) : '1',
+      // false on a Worker set up only for full text (no CommaFeed account): clients hide CommaFeed
+      commafeed: !!(acct && acct.baseUrl && (acct.apiKey || (acct.username && acct.password))),
       full_text: c.fullText,
       kinds: ['unread', 'starred', 'all', 'category', 'feed', 'tag'],
       tag_edit: !!cf.canEditTags,
@@ -256,6 +264,58 @@ async function handleApiInner({ path, url, cf, c, env, ctx, request, accounts, a
       text,
       ...(images ? { images } : {}),
     });
+  }
+
+  // A feed the reader cannot fetch itself (over its 128 KB per answer): the newest n items, or
+  // with &id= one item's text. Needs no CommaFeed account; ?full=1 goes through the full-text chain.
+  if (path === '/api/feed') {
+    const target = url.searchParams.get('url') || '';
+    if (!/^https?:\/\/[^\s/]+/i.test(target)) return json({ error: 'url must be an http(s) address' }, 400);
+    let res;
+    try {
+      res = await fetch(target, {
+        headers: { accept: FEED_ACCEPT, 'user-agent': 'Mozilla/5.0 (commafeed-opds feed relay)' },
+        redirect: 'follow',
+        cf: { cacheTtl: 600, cacheEverything: true },
+      });
+    } catch (err) {
+      return json({ error: `feed not reachable: ${err && err.message}` }, 502);
+    }
+    if (!res.ok) return json({ error: `feed answered HTTP ${res.status}` }, 502);
+    if (Number(res.headers.get('content-length') || 0) > FEED_MAX_BYTES) return json({ error: 'feed too large' }, 413);
+    const body = await res.text();
+    if (body.length > FEED_MAX_BYTES) return json({ error: 'feed too large' }, 413);
+    const feed = parseFeed(body, res.url || target);
+    if (!feed) return json({ error: 'not a feed' }, 422);
+    const id = url.searchParams.get('id');
+    if (id !== null) {
+      const it = feed.items.find((x) => x.id === id);
+      if (!it) return json({ error: 'not in the feed any more' }, 404);
+      let html = it.content || it.summary;
+      let source = 'feed';
+      if (c.fullText && it.link) {
+        const cache = typeof caches !== 'undefined' ? caches.default : null;
+        const full = await extractFullText(env, c.chain, { url: it.link, title: it.title }, { cache, waitUntil: (p) => ctx.waitUntil(p) });
+        if (full) { html = full.html; source = full.source; }
+      }
+      const max = clampInt(url.searchParams.get('max'), TEXT_DEFAULT, 500, TEXT_MAX);
+      const { text, images } = await textAndImages(html, it.link || target, max, url.searchParams.get('images') === '1', ctx);
+      return json({ id, title: it.title || '(untitled)', feed: feed.title, url: it.link || '', source, text, ...(images ? { images } : {}) });
+    }
+    const n = clampInt(url.searchParams.get('n'), LIST_DEFAULT, 1, LIST_MAX);
+    // newest first; items without a date keep their place after the dated ones
+    const items = feed.items.map((it, i) => ({ it, i }))
+      .sort((a, b) => (b.it.date ?? -Infinity) - (a.it.date ?? -Infinity) || a.i - b.i)
+      .slice(0, n)
+      .map(({ it }) => ({
+        id: it.id,
+        title: it.title || '(untitled)',
+        link: it.link || '',
+        date: it.date,
+        excerpt: excerpt(it.summary || it.content, FEED_EXCERPT_CHARS),
+        has_content: !!it.content,
+      }));
+    return json({ title: feed.title, link: feed.link, total: feed.items.length, items });
   }
 
   // Any article by its address (for apps that list links found elsewhere, such as Hacker News):
